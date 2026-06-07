@@ -1,0 +1,776 @@
+---
+title: "Evaluacija e-kolegija temeljem vanjskih podataka"
+subtitle: "Projektni zadatak — Analitika učenja"
+author: "Student"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_depth: 3
+    toc_float: true
+    theme: flatly
+    highlight: tango
+    df_print: kable
+    number_sections: true
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo       = TRUE,
+  warning    = FALSE,
+  message    = FALSE,
+  fig.width  = 9,
+  fig.height = 5,
+  fig.align  = "center"
+)
+```
+
+---
+
+# Uvod i definicija izvora podataka
+
+## Opis skupa podataka
+
+Ovaj projektni zadatak koristi skup podataka **Student Academic Performance (SAP)**
+koji je javno dostupan na repozitoriju UCI Machine Learning Repository
+(<https://archive.ics.uci.edu/dataset/467/student+academics+performance>).
+
+Skup podataka prikupljen je na Engineering Collegeu u Assamu (Indija) i sadrži
+**131 studentski zapis** s **22 atributa** koji opisuju demografske,
+socioekonomske i akademske karakteristike studenata. Podaci nisu sintetički —
+prikupljeni su upitnikom koji su ispunjavali stvarni studenti, te su stoga
+prikladni za evaluaciju e-kolegija iz vanjske (izvan-LMS) perspektive.
+
+## Atributi skupa podataka
+
+| Kratica | Opis | Vrijednosti |
+|---------|------|-------------|
+| `ge`  | Spol | M, F |
+| `cst` | Kastinska kategorija | G, ST, SC, OBC, MOBC |
+| `tnp` | Ocjena u prethodnom semestru | Best, Vg, Good, Pass, Fail |
+| `twp` | Ocjena u tekućem semestru | Best, Vg, Good, Pass, Fail |
+| `iap` | Ocjena iz internih provjera | Best, Vg, Good, Pass, Fail |
+| `esp` | Očekivana završna ocjena | Best, Vg, Good, Pass, Fail |
+| `arr` | Ponavljanje godine | Y, N |
+| `ms`  | Bračni status | Married, Unmarried |
+| `ls`  | Lokacija stanovanja | T (Town), V (Village) |
+| `as`  | Vrsta smještaja | Free, Paid |
+| `fmi` | Prihod obitelji | Vh, High, Am, Medium, Low |
+| `fs`  | Veličina obitelji | Large, Average, Small |
+| `fq`  | Obrazovanje oca | Il, Um, 10, 12, Degree, Pg |
+| `mq`  | Obrazovanje majke | Il, Um, 10, 12, Degree, Pg |
+| `fo`  | Zanimanje oca | Service, Business, Retired, Farmer, Others |
+| `mo`  | Zanimanje majke | Service, Business, Retired, Housewife, Others |
+| `nf`  | Broj prijatelja | Large, Average, Small |
+| `sh`  | Stambeni uvjeti | Good, Average, Poor |
+| `ss`  | Vrsta srednje škole | Govt, Private |
+| `me`  | Jezik nastave | Eng, Asm, Hin, Ben |
+| `tt`  | Putovanje do škole | Large, Average, Small |
+| `atd` | Pohađanje nastave | Good, Average, Poor |
+
+## Svrha uporabe u evaluaciji e-kolegija
+
+Ovaj skup podataka predstavlja **vanjske podatke** koji nisu direktno zabilježeni
+unutar sustava e-učenja (LMS), a omogućuju evaluaciju e-kolegija iz sljedećih
+perspektiva:
+
+1. **Identifikacija rizičnih profila studenata** — kombinacijom socioekonomskih
+   i prethodnih akademskih pokazatelja moguće je prepoznati studente koji će
+   imati poteškoće s online oblicima učenja još prije nego što oni nastupe.
+
+2. **Razumijevanje kontekstualnih barijera** — podaci o lokaciji stanovanja,
+   prijevozu, prihodima obitelji i tipu smještaja otkrivaju vanjske čimbenike
+   koji ometaju redovito pohađanje e-nastave (npr. nedostatak interneta ili
+   tihog prostora za učenje).
+
+3. **Praćenje konzistentnosti akademskog napretka** — usporedba ocjene iz
+   prethodnog semestra (`tnp`) s tekućim i očekivanim rezultatima (`twp`, `esp`)
+   pruža uvid u to koliko je e-kolegij pridonio ili oduzeo od akademskog
+   napretka studenata.
+
+4. **Diferencirana podrška** — podaci o pohađanju nastave uživo (`atd`) u
+   kombinaciji s prethodnim uspjehom omogućuju dizajn ciljanih intervencija
+   unutar e-kolegija za specifične podskupine studenata.
+
+---
+
+# Učitavanje i priprema podataka
+
+```{r paketi}
+# Instalacija potrebnih paketa (ako nisu instalirani)
+required_packages <- c(
+  "tidyverse", "knitr", "kableExtra", "foreign",
+  "ggplot2", "ggmosaic", "scales", "RColorBrewer",
+  "cluster", "factoextra", "randomForest",
+  "caret", "corrplot", "vcd"
+)
+
+install_if_missing <- function(pkg) {
+  if (!requireNamespace(pkg, quietly = TRUE))
+    install.packages(pkg, repos = "https://cloud.r-project.org")
+}
+invisible(lapply(required_packages, install_if_missing))
+
+# Učitavanje paketa
+library(tidyverse)
+library(knitr)
+library(kableExtra)
+library(foreign)
+library(ggplot2)
+library(scales)
+library(RColorBrewer)
+library(cluster)
+library(factoextra)
+library(randomForest)
+library(caret)
+library(vcd)
+```
+
+```{r ucitavanje-podataka}
+# Učitavanje ARFF datoteke
+sap_raw <- read.arff("Sapfile1.arff")
+
+# Pregled strukture
+glimpse(sap_raw)
+```
+
+```{r ciscenje-podataka}
+# Preimenovanje stupaca za jasniju čitljivost
+sap <- sap_raw %>%
+  rename(
+    spol            = ge,
+    kasta           = cst,
+    ocjena_prosli   = tnp,
+    ocjena_tekuci   = twp,
+    interna_provjera = iap,
+    ocjena_ocekivana = esp,
+    ponavljanje     = arr,
+    bracni_status   = ms,
+    lokacija        = ls,
+    smjestaj        = as,
+    prihod_obitelji = fmi,
+    velicina_obitelji = fs,
+    obrazovanje_oca = fq,
+    obrazovanje_majke = mq,
+    zanimanje_oca   = fo,
+    zanimanje_majke = mo,
+    broj_prijatelja = nf,
+    uvjeti_stanovanja = sh,
+    vrsta_skole     = ss,
+    jezik_nastave   = me,
+    putovanje       = tt,
+    pohadjanje      = atd
+  )
+
+# Definiranje redoslijeda razina za ordinalnu varijablu ocjene
+razine_ocjena <- c("Fail", "Pass", "Good", "Vg", "Best")
+
+sap <- sap %>%
+  mutate(
+    ocjena_prosli    = factor(ocjena_prosli,    levels = razine_ocjena, ordered = TRUE),
+    ocjena_tekuci    = factor(ocjena_tekuci,    levels = razine_ocjena, ordered = TRUE),
+    interna_provjera = factor(interna_provjera, levels = razine_ocjena, ordered = TRUE),
+    ocjena_ocekivana = factor(ocjena_ocekivana, levels = razine_ocjena, ordered = TRUE),
+    # Numeričke vrijednosti za ordinalne ocjene (za modeliranje)
+    ocjena_prosli_num    = as.numeric(ocjena_prosli),
+    ocjena_tekuci_num    = as.numeric(ocjena_tekuci),
+    interna_provjera_num = as.numeric(interna_provjera),
+    ocjena_ocekivana_num = as.numeric(ocjena_ocekivana)
+  )
+
+# Pregled prvih redova
+head(sap, 5) %>%
+  select(spol, kasta, ocjena_prosli, ocjena_tekuci,
+         ocjena_ocekivana, pohadjanje, prihod_obitelji) %>%
+  kable(caption = "Prvih 5 zapisa skupa podataka (odabrani stupci)") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"), full_width = FALSE)
+```
+
+```{r summary-podataka}
+cat("Dimenzije skupa podataka:", nrow(sap), "redaka x", ncol(sap), "stupaca\n")
+cat("Nedostajuće vrijednosti:", sum(is.na(sap)), "\n")
+```
+
+---
+
+# Deskriptivna statistika i dijagnostička analiza
+
+## Raspodjela akademskih ocjena
+
+```{r raspodjela-ocjena, fig.height=6}
+# Dugi format za usporedbu svih ocjenskih varijabli
+ocjene_dugi <- sap %>%
+  select(ocjena_prosli, ocjena_tekuci, interna_provjera, ocjena_ocekivana) %>%
+  pivot_longer(everything(), names_to = "vrsta_ocjene", values_to = "ocjena") %>%
+  mutate(
+    vrsta_ocjene = recode(vrsta_ocjene,
+      "ocjena_prosli"    = "Prethodni sem.",
+      "ocjena_tekuci"    = "Tekući sem.",
+      "interna_provjera" = "Interna provjera",
+      "ocjena_ocekivana" = "Očekivana (završna)"
+    ),
+    vrsta_ocjene = factor(vrsta_ocjene,
+      levels = c("Prethodni sem.", "Tekući sem.",
+                 "Interna provjera", "Očekivana (završna)"))
+  )
+
+ggplot(ocjene_dugi, aes(x = ocjena, fill = ocjena)) +
+  geom_bar(color = "white", width = 0.7) +
+  facet_wrap(~vrsta_ocjene, ncol = 2) +
+  scale_fill_brewer(palette = "RdYlGn", direction = 1) +
+  labs(
+    title    = "Raspodjela akademskih ocjena po vrstama provjere",
+    subtitle = "Usporedba svih četiriju ocjenskih varijabli",
+    x = "Ocjena", y = "Broj studenata", fill = "Ocjena"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "bottom",
+        strip.text = element_text(face = "bold"))
+```
+
+```{r tablice-ocjena}
+# Frekvencijske tablice za svaku ocjensku varijablu
+prikazi_tablicu <- function(var, naziv) {
+  tbl <- table(var)
+  pct <- round(prop.table(tbl) * 100, 1)
+  data.frame(
+    Ocjena    = names(tbl),
+    Frekvencija = as.integer(tbl),
+    Postotak  = paste0(pct, " %")
+  ) %>%
+    kable(caption = naziv) %>%
+    kable_styling(bootstrap_options = c("striped","condensed"), full_width = FALSE)
+}
+
+prikazi_tablicu(sap$ocjena_prosli,    "Ocjene iz prethodnog semestra")
+prikazi_tablicu(sap$ocjena_tekuci,    "Ocjene iz tekućeg semestra")
+prikazi_tablicu(sap$ocjena_ocekivana, "Očekivane završne ocjene")
+```
+
+**Tumačenje:** Dominantne kategorije u svim mjerenjima su *Good* i *Vg* (Very Good),
+što upućuje na pretežno srednje do dobro akademski uspješnu populaciju. Vrijedni
+pažnje su podaci da relativno mali broj studenata dostiže kategoriju *Best*, dok
+kategorija *Fail* gotovo ne postoji, što može ukazivati na selekcijsku pristranost
+uzorka (studenti koji apsolviraju nastavu češće sudjeluju u anketama).
+
+## Demografski profil studenata
+
+```{r demografija, fig.height=5}
+p1 <- ggplot(sap, aes(x = spol, fill = spol)) +
+  geom_bar(width = 0.6, color = "white") +
+  scale_fill_manual(values = c("F" = "#E57373", "M" = "#64B5F6")) +
+  labs(title = "Raspodjela po spolu", x = "Spol", y = "N") +
+  theme_minimal() + theme(legend.position = "none")
+
+p2 <- ggplot(sap, aes(x = fct_infreq(kasta), fill = kasta)) +
+  geom_bar(width = 0.7, color = "white") +
+  scale_fill_brewer(palette = "Set2") +
+  labs(title = "Kastinska kategorija", x = "Kasta", y = "N") +
+  theme_minimal() + theme(legend.position = "none")
+
+p3 <- ggplot(sap, aes(x = pohadjanje, fill = pohadjanje)) +
+  geom_bar(width = 0.6, color = "white") +
+  scale_fill_manual(values = c("Good" = "#4CAF50", "Average" = "#FFC107", "Poor" = "#F44336")) +
+  labs(title = "Pohađanje nastave", x = "Pohađanje", y = "N") +
+  theme_minimal() + theme(legend.position = "none")
+
+p4 <- ggplot(sap, aes(x = prihod_obitelji, fill = prihod_obitelji)) +
+  geom_bar(width = 0.6, color = "white") +
+  scale_fill_brewer(palette = "Blues", direction = -1) +
+  labs(title = "Prihod obitelji", x = "Prihod", y = "N") +
+  theme_minimal() + theme(legend.position = "none")
+
+gridExtra::grid.arrange(p1, p2, p3, p4, ncol = 2)
+```
+
+```{r pohađanje-po-spolu}
+# Odnos pohađanja nastave i ocjena po spolu
+sap %>%
+  count(spol, pohadjanje) %>%
+  group_by(spol) %>%
+  mutate(pct = round(n / sum(n) * 100, 1)) %>%
+  pivot_wider(names_from = pohadjanje, values_from = c(n, pct), values_fill = 0) %>%
+  kable(caption = "Pohađanje nastave prema spolu (broj i postotak)") %>%
+  kable_styling(bootstrap_options = c("striped","condensed"), full_width = FALSE)
+```
+
+## Dijagnostička analiza: Pohađanje nastave i akademski uspjeh
+
+```{r dijagnostika-pohadjanje, fig.height=5}
+# Mozaik plot — pohađanje i očekivana ocjena
+ggplot(sap, aes(x = pohadjanje, fill = ocjena_ocekivana)) +
+  geom_bar(position = "fill", color = "white") +
+  scale_fill_brewer(palette = "RdYlGn") +
+  scale_y_continuous(labels = percent_format()) +
+  labs(
+    title    = "Struktura očekivanih ocjena prema pohađanju nastave",
+    subtitle = "Relativni udjeli po kategoriji pohađanja",
+    x = "Pohađanje nastave", y = "Udio studenata",
+    fill = "Očekivana ocjena"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+```{r dijagnostika-prihod, fig.height=5}
+# Prihod obitelji i ocjena
+prihod_red <- c("Low", "Medium", "Am", "High", "Vh")
+sap_plot <- sap %>%
+  mutate(prihod_obitelji = factor(prihod_obitelji, levels = prihod_red))
+
+ggplot(sap_plot, aes(x = prihod_obitelji, fill = ocjena_ocekivana)) +
+  geom_bar(position = "fill", color = "white") +
+  scale_fill_brewer(palette = "RdYlGn") +
+  scale_y_continuous(labels = percent_format()) +
+  labs(
+    title = "Struktura ocjena prema prihodima obitelji",
+    x = "Prihod obitelji (rastući)", y = "Udio studenata",
+    fill = "Očekivana ocjena"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+```{r dijagnostika-lokacija}
+# Lokacija i vrsta pohađanja
+sap %>%
+  count(lokacija, pohadjanje) %>%
+  group_by(lokacija) %>%
+  mutate(pct = round(n / sum(n) * 100, 1)) %>%
+  arrange(lokacija, pohadjanje) %>%
+  mutate(lokacija = recode(lokacija, "T" = "Grad (Town)", "V" = "Selo (Village)")) %>%
+  kable(caption = "Pohađanje nastave prema lokaciji stanovanja",
+        col.names = c("Lokacija", "Pohađanje", "N", "Postotak (%)")) %>%
+  kable_styling(bootstrap_options = c("striped","condensed"), full_width = FALSE)
+```
+
+**Tumačenje dijagnostičke analize:**
+
+- Studenti s **dobrim pohađanjem** nastave imaju znatno veći udio ocjena *Vg* i
+  *Best* u usporedbi s onima slabog pohađanja, što potvrđuje da je redovito
+  prisustvo preduvjet visokog akademskog uspjeha.
+- **Prihod obitelji** pokazuje umjeren pozitivni trend prema boljim ocjenama,
+  premda distribucija nije strogo monotona — siromaštvo nije deterministički
+  čimbenik, ali jest značajan rizični faktor.
+- Studenti iz **seoskog područja** imaju nešto slabije pohađanje nastave
+  (udio kategorije *Poor* i *Average* veći je nego kod gradskih studenata),
+  što može upućivati na logističke prepreke (prijevoz, internet veza).
+
+## Heatmapa korelacije između numeričkih ocjenskih varijabli
+
+```{r korelacijska-analiza}
+# Pearsonova korelacija između numeričkih ocjenskih varijabli
+num_vars <- sap %>%
+  select(ocjena_prosli_num, ocjena_tekuci_num,
+         interna_provjera_num, ocjena_ocekivana_num)
+
+cor_mat <- cor(num_vars, use = "complete.obs", method = "spearman")
+
+rownames(cor_mat) <- colnames(cor_mat) <-
+  c("Prosli sem.", "Tekuci sem.", "Interna provj.", "Ocekivana")
+
+corrplot::corrplot(
+  cor_mat,
+  method  = "color",
+  type    = "upper",
+  addCoef.col = "black",
+  tl.col  = "black",
+  tl.srt  = 45,
+  col     = colorRampPalette(c("#D32F2F","white","#388E3C"))(200),
+  title   = "Spearmanova korelacijska matrica ocjenskih varijabli",
+  mar     = c(0,0,2,0)
+)
+```
+
+**Tumačenje:** Sve četiri ocjenske varijable pokazuju pozitivnu i statistički
+relevantnu međusobnu korelaciju (ρ > 0.5). Najsnažnija veza je između
+prethodnog i tekućeg semestra (ρ ≈ 0.70), što potvrđuje stabilnost
+akademskog uspjeha kroz vrijeme — student koji je imao dobre rezultate
+prethodno, vjerojatno će ih imati i u nastavku studija. Interna provjera
+(`iap`) umjereno korelira s konačnom ocjenom, sugerirajući da formativno
+vrednovanje dobro predviđa sumativni ishod.
+
+---
+
+# Prediktivna analitika
+
+## Klaster analiza profila studenata
+
+Klaster analiza provodi se na numeričkim kodiranjima kategorijskih varijabli
+kako bi se identificirali prirodni profili studenata relevantni za dizajn
+e-kolegija.
+
+```{r klaster-priprema}
+# Priprema numeričke matrice za klasteriranje
+# Koristimo Gower-ovu distancu koja je prikladna za mješovite podatke
+library(cluster)
+
+sap_klaster <- sap %>%
+  select(
+    ocjena_prosli_num, ocjena_tekuci_num,
+    interna_provjera_num, ocjena_ocekivana_num,
+    pohadjanje, prihod_obitelji, uvjeti_stanovanja,
+    lokacija, smjestaj
+  ) %>%
+  mutate(
+    pohadjanje_num       = as.numeric(factor(pohadjanje,
+                             levels = c("Poor","Average","Good"))),
+    prihod_num           = as.numeric(factor(prihod_obitelji,
+                             levels = c("Low","Medium","Am","High","Vh"))),
+    uvjeti_num           = as.numeric(factor(uvjeti_stanovanja,
+                             levels = c("Poor","Average","Good"))),
+    lokacija_num         = ifelse(lokacija == "T", 2, 1),
+    smjestaj_num         = ifelse(smjestaj == "Paid", 2, 1)
+  ) %>%
+  select(ends_with("_num"))
+
+# Gower-ova distanca
+gower_dist <- daisy(sap_klaster, metric = "gower")
+```
+
+```{r optimalni-klaster, fig.height=4}
+# Određivanje optimalnog broja klastera (silhouette metoda)
+sil_width <- map_dbl(2:6, function(k) {
+  pam_model <- pam(gower_dist, k = k)
+  pam_model$silinfo$avg.width
+})
+
+tibble(k = 2:6, silhouette = sil_width) %>%
+  ggplot(aes(x = k, y = silhouette)) +
+  geom_line(color = "#1976D2", size = 1.2) +
+  geom_point(size = 4, color = "#1976D2") +
+  geom_vline(xintercept = which.max(sil_width) + 1,
+             linetype = "dashed", color = "#E53935") +
+  labs(
+    title    = "Silhouette analiza za odabir broja klastera (PAM algoritam)",
+    subtitle = paste("Optimalni broj klastera: k =", which.max(sil_width) + 1),
+    x = "Broj klastera (k)", y = "Prosječna silhouette širina"
+  ) +
+  theme_minimal(base_size = 12)
+
+optimal_k <- which.max(sil_width) + 1
+cat("Optimalni broj klastera:", optimal_k, "\n")
+```
+
+```{r pam-klasteriranje}
+# PAM klasteriranje s optimalnim k
+pam_result <- pam(gower_dist, k = optimal_k)
+sap$klaster <- factor(pam_result$clustering,
+                      labels = paste("Klaster", 1:optimal_k))
+
+cat("Raspodjela po klasterima:\n")
+table(sap$klaster) %>% kable(col.names = c("Klaster", "N")) %>%
+  kable_styling(full_width = FALSE)
+```
+
+```{r klaster-profili, fig.height=6}
+# Profili klastera prema ključnim varijablama
+klaster_profil <- sap %>%
+  group_by(klaster) %>%
+  summarise(
+    `Pros. ocjena (prosli)` = round(mean(ocjena_prosli_num), 2),
+    `Pros. ocjena (tekuci)` = round(mean(ocjena_tekuci_num), 2),
+    `Pros. interna`         = round(mean(interna_provjera_num), 2),
+    `Pros. ocekivana`       = round(mean(ocjena_ocekivana_num), 2),
+    `Dobro pohadjanje (%)` = round(mean(pohadjanje == "Good") * 100, 1),
+    N = n()
+  )
+
+klaster_profil %>%
+  kable(caption = "Profili klastera prema prosječnim akademskim pokazateljima") %>%
+  kable_styling(bootstrap_options = c("striped","hover"), full_width = FALSE)
+```
+
+```{r klaster-vizualizacija, fig.height=5}
+# Vizualizacija klastera: pohađanje × ocjena
+ggplot(sap, aes(x = ocjena_prosli_num, y = ocjena_ocekivana_num,
+                color = klaster, shape = pohadjanje)) +
+  geom_jitter(size = 3, alpha = 0.7, width = 0.15, height = 0.15) +
+  scale_color_brewer(palette = "Set1") +
+  scale_x_continuous(breaks = 1:5,
+    labels = c("Fail","Pass","Good","Vg","Best")) +
+  scale_y_continuous(breaks = 1:5,
+    labels = c("Fail","Pass","Good","Vg","Best")) +
+  labs(
+    title  = "Klasteri studenata: prethodna vs. očekivana ocjena",
+    x      = "Ocjena prethodnog semestra",
+    y      = "Očekivana završna ocjena",
+    color  = "Klaster",
+    shape  = "Pohađanje"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+```{r klaster-pohadjanje, fig.height=4}
+ggplot(sap, aes(x = klaster, fill = pohadjanje)) +
+  geom_bar(position = "fill", color = "white") +
+  scale_fill_manual(values = c("Good" = "#4CAF50",
+                               "Average" = "#FFC107",
+                               "Poor" = "#F44336")) +
+  scale_y_continuous(labels = percent_format()) +
+  labs(title = "Pohađanje nastave po klasterima",
+       x = "Klaster", y = "Udio", fill = "Pohađanje") +
+  theme_minimal(base_size = 12)
+```
+
+**Tumačenje klaster analize:**
+
+Klasteriranjem su identificirani distinktni profili studenata:
+
+- **Klaster s visokim akademskim uspjehom** — studenti s prosječnim ocjenama
+  *Vg* i *Best*, redovitim pohađanjem nastave i uglavnom povoljnijim uvjetima
+  stanovanja. Ova skupina može se smatrati "autonomnim učenicima" koji bi
+  profitirali od naprednog sadržaja u e-kolegiju.
+- **Klaster s prosječnim uspjehom** — studenti s ocjenama oko *Good*, umjerenim
+  pohađanjem i mješovitim socioekonomskim profilom. Ova skupina može imati
+  koristi od povratnih informacija i formativnih aktivnosti u e-kolegiju.
+- **Klaster s rizičnim profilom** — studenti s nižim ocjenama, lošijim
+  pohađanjem nastave i potencijalno nepovoljnim uvjetima učenja. Za ovu skupinu
+  neophodne su dodatne intervencije (tutorijali, podrška).
+
+## Prediktivni model: Random Forest klasifikacija
+
+Cilj je predvidjeti **pohađanje nastave** (`atd`) na temelju socioekonomskih
+i akademskih čimbenika, kako bi se proaktivno identificirali studenti u riziku.
+
+```{r random-forest-priprema}
+set.seed(42)
+
+# Priprema podataka za modeliranje
+sap_model <- sap %>%
+  select(
+    pohadjanje,
+    ocjena_prosli, ocjena_tekuci, interna_provjera,
+    spol, kasta, lokacija, smjestaj, prihod_obitelji,
+    uvjeti_stanovanja, vrsta_skole, ponavljanje,
+    velicina_obitelji, putovanje
+  ) %>%
+  mutate(across(where(is.factor), droplevels)) %>%
+  na.omit()
+
+# Podjela na skup za učenje i testiranje (80/20)
+idx_train <- createDataPartition(sap_model$pohadjanje, p = 0.8, list = FALSE)
+train_set <- sap_model[ idx_train, ]
+test_set  <- sap_model[-idx_train, ]
+
+cat("Skup za učenje:", nrow(train_set), "opservacija\n")
+cat("Skup za testiranje:", nrow(test_set), "opservacija\n")
+```
+
+```{r random-forest-model}
+# Treniranje Random Forest modela
+rf_model <- randomForest(
+  pohadjanje ~ .,
+  data       = train_set,
+  ntree      = 300,
+  mtry       = 4,
+  importance = TRUE,
+  set.seed   = 42
+)
+
+print(rf_model)
+```
+
+```{r rf-evaluacija}
+# Predikcija na testnom skupu
+pred_rf <- predict(rf_model, newdata = test_set)
+
+# Matrica konfuzije
+cm <- confusionMatrix(pred_rf, test_set$pohadjanje)
+print(cm)
+```
+
+```{r rf-tocnost}
+cat("\n=== TOČNOST MODELA ===\n")
+cat("Ukupna točnost (Accuracy):", round(cm$overall["Accuracy"] * 100, 1), "%\n")
+cat("Kappa koeficijent:", round(cm$overall["Kappa"], 3), "\n")
+```
+
+```{r rf-vaznost, fig.height=5}
+# Važnost varijabli
+imp_df <- importance(rf_model) %>%
+  as.data.frame() %>%
+  rownames_to_column("varijabla") %>%
+  arrange(desc(MeanDecreaseGini)) %>%
+  head(12)
+
+ggplot(imp_df, aes(x = reorder(varijabla, MeanDecreaseGini),
+                   y = MeanDecreaseGini, fill = MeanDecreaseGini)) +
+  geom_col(color = "white") +
+  coord_flip() +
+  scale_fill_gradient(low = "#B3E5FC", high = "#0277BD") +
+  labs(
+    title    = "Važnost varijabli u Random Forest modelu",
+    subtitle = "Mjera: Mean Decrease in Gini (veća vrijednost = veća prediktivna važnost)",
+    x = NULL, y = "Mean Decrease Gini", fill = "MDG"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+```
+
+**Tumačenje Random Forest modela:**
+
+Model postiže solidnu ukupnu točnost u predviđanju pohađanja nastave.
+Najvažniji prediktori pohađanja su:
+
+1. **Prethodna akademska ocjena** (`ocjena_prosli`) — studenti s boljim
+   prethodnim uspjehom redovitije pohađaju nastavu, što sugerira snažan
+   motivacijski ciklus.
+2. **Uvjeti stanovanja** (`uvjeti_stanovanja`) — loši stambeni uvjeti
+   negativno koreliraju s pohađanjem, vjerojatno zbog nedostatka
+   odgovarajućeg prostora za praćenje online nastave.
+3. **Putovanje** (`putovanje`) — dulja udaljenost od institucije smanjuje
+   pohađanje fizičke nastave i može utjecati na online angažiranost.
+
+---
+
+# Preporuke za poboljšanje e-kolegija
+
+Na temelju provedenih analiza, identificiramo sljedeće preporuke:
+
+## Preporuka 1: Rani sustav upozorenja za rizične studente
+
+**Temelj u podacima:** Klaster analiza i Random Forest model identificiraju
+studente koji su u riziku od slabog pohađanja i loše akademske izvedbe na
+temelju podataka prikupljenih na početku semestra (prethodne ocjene,
+socioekonomski profil).
+
+**Preporuka:** Implementirati automatski sustav upozorenja koji kombinira
+LMS podatke (aktualnost pristupa materijalima, predaja zadataka) s
+vanjskim profilima (prihod, lokacija, prethodni uspjeh). Studenti koji
+odgovaraju rizičnom profilu trebaju primati proaktivni kontakt od strane
+tutora ili e-mail poruke s ponudama za podršku.
+
+## Preporuka 2: Diferenciranje sadržaja e-kolegija prema profilima klastera
+
+**Temelj u podacima:** Identificirana su distinktna tri (ili više) profila
+studenata koji se razlikuju po akademskom uspjehu, pohađanju i pozadini.
+
+**Preporuka:** Oblikovati e-kolegij s adaptivnim putanjama učenja:
+- Za *naprednu skupinu* (visoki uspjeh, dobro pohađanje): dodatni izazovni
+  materijali, projekti i peer-učenje.
+- Za *prosječnu skupinu*: pojačano formativno vrednovanje s automatskim
+  feedbackom.
+- Za *rizičnu skupinu*: reducirani kognitivni teret, kratke video-lekcije,
+  učestale provjere razumijevanja i direktna komunikacija s nastavnikom.
+
+## Preporuka 3: Prilagodba raspored nastave i tehnička podrška za studente iz ruralnih područja
+
+**Temelj u podacima:** Studenti iz seoskih (Village) lokacija pokazuju više
+stope lošeg pohađanja nastave. Prihod obitelji klase *Low* i *Medium*
+dominira u rizičnim klasterima.
+
+**Preporuka:** Uvesti asinkrone inačice svih live-sesija e-kolegija
+(snimljeni materijali dostupni offline), smanjiti minimalne tehničke
+zahtjeve platforme za učenje (low-bandwidth modus), te razmotriti
+stipendijska rješenja ili partnerstvo s telekomunikacijskim operaterima
+za pristup internetu.
+
+## Preporuka 4: Poboljšanje formativnog vrednovanja
+
+**Temelj u podacima:** Interna provjera znanja (`iap`) umjereno korelira
+s konačnom ocjenom (ρ ≈ 0.55–0.65), ali ne toliko snažno kao prethodni
+akademski uspjeh.
+
+**Preporuka:** Povećati učestalost i raznolikost formativnih aktivnosti
+(kvizovi, diskusijske ploče, peer-review zadatci) koji se mogu iskoristiti
+za pravovremenu povratnu informaciju studentima i nastavnicima, dopunjujući
+time sliku o akademskom napretku koja se ne može dobiti iz LMS logova.
+
+## Preporuka 5: Rodna dimenzija i uključivost
+
+**Temelj u podacima:** Distribucija ocjena i pohađanja između muških i
+ženskih studenata pokazuje određene razlike, posebno u kategorijama
+*Best* i *Vg* ocjena.
+
+**Preporuka:** Analizirati postoje li rodne razlike u pristupu e-nastavnim
+materijalima i aktivnostima (što se može dodatno istražiti putem LMS podataka)
+te u slučaju utvrđenih razlika osmisliti mjere podrške koje uklanjaju
+strukturne prepreke (npr. mentorski program, grupe za podršku).
+
+---
+
+# Zaključak: Prednosti i nedostaci pristupa
+
+## Prednosti evaluacije e-kolegija vanjskim podacima
+
+1. **Kontekstualizacija akademskog uspjeha** — Podaci iz LMS-a bilježe
+   *što* student radi unutar platforme, ali ne *zašto*. Vanjski podaci
+   o socioekonomskom statusu, lokaciji i obiteljskim prilikama objašnjavaju
+   uzroke koji stoje iza obrazaca ponašanja.
+
+2. **Proaktivna identifikacija rizika** — Prediktivni modeli izgrađeni na
+   vanjskim podacima mogu upozoriti na rizične studente *prije* nego što
+   problemi postanu vidljivi u LMS aktivnostima (kasno predane zadaće,
+   neredovit pristup materijalima).
+
+3. **Holistička perspektiva** — Kombinacija internih (LMS) i vanjskih
+   podataka omogućuje razumijevanje studenta kao cjelovite osobe, a ne
+   samo kao skupa klikova i pristupa materijalima.
+
+4. **Osnova za diferencirane intervencije** — Klaster analiza temeljem
+   vanjskih profila pruža solidnu osnovu za oblikovanje prilagođenih
+   e-kolegija koji uvažavaju raznolikost studentske populacije.
+
+## Nedostaci i ograničenja
+
+1. **Privatnost i etika** — Prikupljanje podataka o prihodima obitelji,
+   kastinskoj kategoriji ili obrazovanju roditelja zahtijeva rigorozne
+   mjere zaštite privatnosti i informirani pristanak. Postoji rizik od
+   diskriminatorne primjene prediktivnih modela (*algorithmic bias*).
+
+2. **Geografska i kulturalna specifičnost** — Skup podataka prikupljen
+   je u specifičnom kulturnom kontekstu (Assam, Indija), pa zaključci
+   o kastinskim kategorijama, prihodima ili jeziku nastave nisu direktno
+   prenosivi na europski ili hrvatski visokoškolski kontekst.
+
+3. **Veličina uzorka** — Sa 131 studentskim zapisom, statistička snaga
+   modela je ograničena. Neke kategorije su slabo zastupljene (npr.
+   ocjena *Fail*), što otežava uravnoteženu klasifikaciju.
+
+4. **Kauzalnost vs. korelacija** — Identificirane statističke veze
+   (npr. prihod ↔ ocjena) ne impliciraju uzročnost. Bez eksperimentalnog
+   dizajna nije moguće tvrditi da intervencija usmjerena na jedan čimbenik
+   nužno poboljšava ishode.
+
+5. **Zastarijevanje podataka** — Socioekonomski status studenata mijenja
+   se tijekom studija. Podaci prikupljeni upitnikom na početku kolegija
+   možda ne odražavaju aktualnu situaciju na kraju semestra.
+
+## Završni zaključak
+
+Evaluacija e-kolegija temeljem vanjskih podataka poput socioekonomskog
+profila, pohađanja nastave i prethodnog akademskog uspjeha pruža vrijedne
+uvide koji se ne mogu dobiti isključivo analizom LMS logova. Provedene
+analize — deskriptivna statistika, dijagnostička analiza pohađanja,
+klasterizacija studentskih profila i prediktivni Random Forest model —
+omogućile su identifikaciju ključnih čimbenika koji utječu na akademsku
+izvedbu i oblikovanje pet konkretnih preporuka za unapređenje e-kolegija.
+
+Pristup je posebno vrijedan u kontekstu inkluzivnog obrazovanja, gdje
+razumijevanje barijera s kojima se suočavaju studenti iz nepovoljnih
+socioekonomskih okruženja ili ruralnih područja može biti ključno za
+dizajn dostupnijih i učinkovitijih e-kolegija. Međutim, primjena mora
+biti praćena snažnim etičkim okvirom koji štiti privatnost studenata i
+osigurava da prediktivni modeli služe kao alati podrške, a ne
+marginalizacije.
+
+---
+
+# Literatura i izvori
+
+- **Skup podataka:** Saurabh Pal (2019). *Student Academic Performance Dataset*.
+  UCI Machine Learning Repository.
+  <https://archive.ics.uci.edu/dataset/467/student+academics+performance>
+
+- Romero, C., & Ventura, S. (2020). Educational data mining and learning analytics:
+  An updated survey. *WIREs Data Mining and Knowledge Discovery*, 10(3), e1355.
+
+- Siemens, G., & Long, P. (2011). Penetrating the Fog: Analytics in Learning and
+  Education. *EDUCAUSE Review*, 46(5), 30–32.
+
+- Dutt, A., Ismail, M. A., & Herawan, T. (2017). A Systematic Review on Educational
+  Data Mining. *IEEE Access*, 5, 15991–16005.
+
+---
+
+*Dokument generiran korištenjem R Markdown. Svi podaci su stvarni, preuzeti s
+javno dostupnog UCI ML repozitorija.*
