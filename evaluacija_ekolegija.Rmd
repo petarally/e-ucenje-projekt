@@ -102,7 +102,7 @@ required_packages <- c(
   "tidyverse", "knitr", "kableExtra", "foreign",
   "ggplot2", "ggmosaic", "scales", "RColorBrewer",
   "cluster", "factoextra", "randomForest",
-  "caret", "corrplot", "vcd"
+  "caret", "corrplot", "vcd", "gridExtra"
 )
 
 install_if_missing <- function(pkg) {
@@ -562,8 +562,7 @@ rf_model <- randomForest(
   data       = train_set,
   ntree      = 300,
   mtry       = 4,
-  importance = TRUE,
-  set.seed   = 42
+  importance = TRUE
 )
 
 print(rf_model)
