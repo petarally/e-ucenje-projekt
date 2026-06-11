@@ -1,7 +1,7 @@
 ---
 title: "Evaluacija e-kolegija temeljem vanjskih podataka"
-subtitle: "Projektni zadatak — Analitika učenja"
-author: "Student"
+subtitle: "Projektni zadatak - Analitika učenja"
+author: "Petar Prenc"
 date: "`r Sys.Date()`"
 output:
   html_document:
@@ -37,7 +37,7 @@ koji je javno dostupan na repozitoriju UCI Machine Learning Repository
 
 Skup podataka prikupljen je na Engineering Collegeu u Assamu (Indija) i sadrži
 **131 studentski zapis** s **22 atributa** koji opisuju demografske,
-socioekonomske i akademske karakteristike studenata. Podaci nisu sintetički —
+socioekonomske i akademske karakteristike studenata. Podaci nisu sintetički -
 prikupljeni su upitnikom koji su ispunjavali stvarni studenti, te su stoga
 prikladni za evaluaciju e-kolegija iz vanjske (izvan-LMS) perspektive.
 
@@ -74,21 +74,21 @@ Ovaj skup podataka predstavlja **vanjske podatke** koji nisu direktno zabilježe
 unutar sustava e-učenja (LMS), a omogućuju evaluaciju e-kolegija iz sljedećih
 perspektiva:
 
-1. **Identifikacija rizičnih profila studenata** — kombinacijom socioekonomskih
+1. **Identifikacija rizičnih profila studenata** - kombinacijom socioekonomskih
    i prethodnih akademskih pokazatelja moguće je prepoznati studente koji će
    imati poteškoće s online oblicima učenja još prije nego što oni nastupe.
 
-2. **Razumijevanje kontekstualnih barijera** — podaci o lokaciji stanovanja,
+2. **Razumijevanje kontekstualnih barijera** - podaci o lokaciji stanovanja,
    prijevozu, prihodima obitelji i tipu smještaja otkrivaju vanjske čimbenike
    koji ometaju redovito pohađanje e-nastave (npr. nedostatak interneta ili
    tihog prostora za učenje).
 
-3. **Praćenje konzistentnosti akademskog napretka** — usporedba ocjene iz
+3. **Praćenje konzistentnosti akademskog napretka** - usporedba ocjene iz
    prethodnog semestra (`tnp`) s tekućim i očekivanim rezultatima (`twp`, `esp`)
    pruža uvid u to koliko je e-kolegij pridonio ili oduzeo od akademskog
    napretka studenata.
 
-4. **Diferencirana podrška** — podaci o pohađanju nastave uživo (`atd`) u
+4. **Diferencirana podrška** - podaci o pohađanju nastave uživo (`atd`) u
    kombinaciji s prethodnim uspjehom omogućuju dizajn ciljanih intervencija
    unutar e-kolegija za specifične podskupine studenata.
 
@@ -297,7 +297,7 @@ sap %>%
 ## Dijagnostička analiza: Pohađanje nastave i akademski uspjeh
 
 ```{r dijagnostika-pohadjanje, fig.height=5}
-# Mozaik plot — pohađanje i očekivana ocjena
+# Mozaik plot - pohađanje i očekivana ocjena
 ggplot(sap, aes(x = pohadjanje, fill = ocjena_ocekivana)) +
   geom_bar(position = "fill", color = "white") +
   scale_fill_brewer(palette = "RdYlGn") +
@@ -348,7 +348,7 @@ sap %>%
   *Best* u usporedbi s onima slabog pohađanja, što potvrđuje da je redovito
   prisustvo preduvjet visokog akademskog uspjeha.
 - **Prihod obitelji** pokazuje umjeren pozitivni trend prema boljim ocjenama,
-  premda distribucija nije strogo monotona — siromaštvo nije deterministički
+  premda distribucija nije strogo monotona - siromaštvo nije deterministički
   čimbenik, ali jest značajan rizični faktor.
 - Studenti iz **seoskog područja** imaju nešto slabije pohađanje nastave
   (udio kategorije *Poor* i *Average* veći je nego kod gradskih studenata),
@@ -383,7 +383,7 @@ corrplot::corrplot(
 **Tumačenje:** Sve četiri ocjenske varijable pokazuju pozitivnu i statistički
 relevantnu međusobnu korelaciju (ρ > 0.5). Najsnažnija veza je između
 prethodnog i tekućeg semestra (ρ ≈ 0.70), što potvrđuje stabilnost
-akademskog uspjeha kroz vrijeme — student koji je imao dobre rezultate
+akademskog uspjeha kroz vrijeme - student koji je imao dobre rezultate
 prethodno, vjerojatno će ih imati i u nastavku studija. Interna provjera
 (`iap`) umjereno korelira s konačnom ocjenom, sugerirajući da formativno
 vrednovanje dobro predviđa sumativni ishod.
@@ -515,14 +515,14 @@ ggplot(sap, aes(x = klaster, fill = pohadjanje)) +
 
 Klasteriranjem su identificirani distinktni profili studenata:
 
-- **Klaster s visokim akademskim uspjehom** — studenti s prosječnim ocjenama
+- **Klaster s visokim akademskim uspjehom** - studenti s prosječnim ocjenama
   *Vg* i *Best*, redovitim pohađanjem nastave i uglavnom povoljnijim uvjetima
   stanovanja. Ova skupina može se smatrati "autonomnim učenicima" koji bi
   profitirali od naprednog sadržaja u e-kolegiju.
-- **Klaster s prosječnim uspjehom** — studenti s ocjenama oko *Good*, umjerenim
+- **Klaster s prosječnim uspjehom** - studenti s ocjenama oko *Good*, umjerenim
   pohađanjem i mješovitim socioekonomskim profilom. Ova skupina može imati
   koristi od povratnih informacija i formativnih aktivnosti u e-kolegiju.
-- **Klaster s rizičnim profilom** — studenti s nižim ocjenama, lošijim
+- **Klaster s rizičnim profilom** - studenti s nižim ocjenama, lošijim
   pohađanjem nastave i potencijalno nepovoljnim uvjetima učenja. Za ovu skupinu
   neophodne su dodatne intervencije (tutorijali, podrška).
 
@@ -610,13 +610,13 @@ ggplot(imp_df, aes(x = reorder(varijabla, MeanDecreaseGini),
 Model postiže solidnu ukupnu točnost u predviđanju pohađanja nastave.
 Najvažniji prediktori pohađanja su:
 
-1. **Prethodna akademska ocjena** (`ocjena_prosli`) — studenti s boljim
+1. **Prethodna akademska ocjena** (`ocjena_prosli`) - studenti s boljim
    prethodnim uspjehom redovitije pohađaju nastavu, što sugerira snažan
    motivacijski ciklus.
-2. **Uvjeti stanovanja** (`uvjeti_stanovanja`) — loši stambeni uvjeti
+2. **Uvjeti stanovanja** (`uvjeti_stanovanja`) - loši stambeni uvjeti
    negativno koreliraju s pohađanjem, vjerojatno zbog nedostatka
    odgovarajućeg prostora za praćenje online nastave.
-3. **Putovanje** (`putovanje`) — dulja udaljenost od institucije smanjuje
+3. **Putovanje** (`putovanje`) - dulja udaljenost od institucije smanjuje
    pohađanje fizičke nastave i može utjecati na online angažiranost.
 
 ---
@@ -691,46 +691,46 @@ strukturne prepreke (npr. mentorski program, grupe za podršku).
 
 ## Prednosti evaluacije e-kolegija vanjskim podacima
 
-1. **Kontekstualizacija akademskog uspjeha** — Podaci iz LMS-a bilježe
+1. **Kontekstualizacija akademskog uspjeha** - Podaci iz LMS-a bilježe
    *što* student radi unutar platforme, ali ne *zašto*. Vanjski podaci
    o socioekonomskom statusu, lokaciji i obiteljskim prilikama objašnjavaju
    uzroke koji stoje iza obrazaca ponašanja.
 
-2. **Proaktivna identifikacija rizika** — Prediktivni modeli izgrađeni na
+2. **Proaktivna identifikacija rizika** - Prediktivni modeli izgrađeni na
    vanjskim podacima mogu upozoriti na rizične studente *prije* nego što
    problemi postanu vidljivi u LMS aktivnostima (kasno predane zadaće,
    neredovit pristup materijalima).
 
-3. **Holistička perspektiva** — Kombinacija internih (LMS) i vanjskih
+3. **Holistička perspektiva** - Kombinacija internih (LMS) i vanjskih
    podataka omogućuje razumijevanje studenta kao cjelovite osobe, a ne
    samo kao skupa klikova i pristupa materijalima.
 
-4. **Osnova za diferencirane intervencije** — Klaster analiza temeljem
+4. **Osnova za diferencirane intervencije** - Klaster analiza temeljem
    vanjskih profila pruža solidnu osnovu za oblikovanje prilagođenih
    e-kolegija koji uvažavaju raznolikost studentske populacije.
 
 ## Nedostaci i ograničenja
 
-1. **Privatnost i etika** — Prikupljanje podataka o prihodima obitelji,
+1. **Privatnost i etika** - Prikupljanje podataka o prihodima obitelji,
    kastinskoj kategoriji ili obrazovanju roditelja zahtijeva rigorozne
    mjere zaštite privatnosti i informirani pristanak. Postoji rizik od
    diskriminatorne primjene prediktivnih modela (*algorithmic bias*).
 
-2. **Geografska i kulturalna specifičnost** — Skup podataka prikupljen
+2. **Geografska i kulturalna specifičnost** - Skup podataka prikupljen
    je u specifičnom kulturnom kontekstu (Assam, Indija), pa zaključci
    o kastinskim kategorijama, prihodima ili jeziku nastave nisu direktno
    prenosivi na europski ili hrvatski visokoškolski kontekst.
 
-3. **Veličina uzorka** — Sa 131 studentskim zapisom, statistička snaga
+3. **Veličina uzorka** - Sa 131 studentskim zapisom, statistička snaga
    modela je ograničena. Neke kategorije su slabo zastupljene (npr.
    ocjena *Fail*), što otežava uravnoteženu klasifikaciju.
 
-4. **Kauzalnost vs. korelacija** — Identificirane statističke veze
+4. **Kauzalnost vs. korelacija** - Identificirane statističke veze
    (npr. prihod ↔ ocjena) ne impliciraju uzročnost. Bez eksperimentalnog
    dizajna nije moguće tvrditi da intervencija usmjerena na jedan čimbenik
    nužno poboljšava ishode.
 
-5. **Zastarijevanje podataka** — Socioekonomski status studenata mijenja
+5. **Zastarijevanje podataka** - Socioekonomski status studenata mijenja
    se tijekom studija. Podaci prikupljeni upitnikom na početku kolegija
    možda ne odražavaju aktualnu situaciju na kraju semestra.
 
@@ -739,8 +739,8 @@ strukturne prepreke (npr. mentorski program, grupe za podršku).
 Evaluacija e-kolegija temeljem vanjskih podataka poput socioekonomskog
 profila, pohađanja nastave i prethodnog akademskog uspjeha pruža vrijedne
 uvide koji se ne mogu dobiti isključivo analizom LMS logova. Provedene
-analize — deskriptivna statistika, dijagnostička analiza pohađanja,
-klasterizacija studentskih profila i prediktivni Random Forest model —
+analize - deskriptivna statistika, dijagnostička analiza pohađanja,
+klasterizacija studentskih profila i prediktivni Random Forest model -
 omogućile su identifikaciju ključnih čimbenika koji utječu na akademsku
 izvedbu i oblikovanje pet konkretnih preporuka za unapređenje e-kolegija.
 
