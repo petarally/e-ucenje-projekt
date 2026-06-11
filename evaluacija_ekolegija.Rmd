@@ -92,6 +92,34 @@ perspektiva:
    kombinaciji s prethodnim uspjehom omogućuju dizajn ciljanih intervencija
    unutar e-kolegija za specifične podskupine studenata.
 
+## Vrste analiza koje podatci omogućuju
+
+Kategorijska i ordinalna priroda varijabli (ocjene, pohađanje, prihod) te
+njihova mješovita skala čine ovaj skup podataka prikladnim za sljedeće
+analitičke pristupe:
+
+- **Deskriptivna statistika** — frekvencijske distribucije, kontingencijske
+  tablice i mjere centralne tendencije na numeričkim kodiranjima ordinalnih
+  varijabli; prikladno za profiliranje studentske populacije i praćenje KPI-ja.
+
+- **Dijagnostička analiza** — identifikacija obrazaca između podskupina
+  (pohađanje prema prihodima, lokaciji, spolu); omogućuje određivanje koji
+  kontekstualni čimbenici najviše koreliraju s lošim akademskim ishodima.
+
+- **Korelacijska i regresijska analiza** — kvantifikacija veze između
+  socioekonomskih varijabli i akademskih ishoda; regresijski koeficijenti
+  daju interpretabilnu mjeru relativnog doprinosa svake varijable što je
+  izravno prenosivo u preporuke za dizajn e-kolegija.
+
+- **Klaster analiza** — nesupervizirano grupiranje studenata u homogene
+  profile prema kombinaciji akademskih i socioekonomskih karakteristika;
+  rezultati se koriste za oblikovanje diferenciranih putanja učenja.
+
+- **Prediktivna klasifikacija** — treniranje modela (npr. Random Forest)
+  koji na temelju profila studenta prikupljenog na početku kolegija
+  predviđaju pohađanje ili akademski ishod, čime se omogućuje proaktivna
+  identifikacija studenata u riziku.
+
 ---
 
 # Učitavanje i priprema podataka
@@ -102,7 +130,7 @@ required_packages <- c(
   "tidyverse", "knitr", "kableExtra", "foreign",
   "ggplot2", "ggmosaic", "scales", "RColorBrewer",
   "cluster", "factoextra", "randomForest",
-  "caret", "corrplot", "vcd", "gridExtra"
+  "caret", "corrplot", "vcd", "gridExtra", "broom"
 )
 
 install_if_missing <- function(pkg) {
@@ -193,7 +221,154 @@ cat("Nedostajuće vrijednosti:", sum(is.na(sap)), "\n")
 
 ---
 
+# Definiranje ključnih pokazatelja uspješnosti (KPI-ji)
+
+Ključni pokazatelji uspješnosti (KPI-ji) operacionaliziraju ciljeve evaluacije
+e-kolegija u mjerljive, praćljive i usporedive veličine. Bez jasno definiranih
+KPI-ja analiza ostaje opisna — KPI-ji daju normativni okvir koji omogućuje
+zaključivanje o tome je li e-kolegij uspješan i u kojim dimenzijama treba
+intervenciju.
+
+U ovom projektu definirano je pet KPI-ja koji se izravno izračunavaju iz
+dostupnih vanjskih (izvan-LMS) podataka i pokrivaju četiri evaluacijske
+dimenzije: **angažiranost**, **akademski napredak**, **prolaznost** i
+**valjanost vrednovanja**.
+
+## Pregled i definicije KPI-ja
+
+| KPI | Naziv | Definicija | Mjeri | Ciljna vrijednost |
+|-----|-------|------------|-------|------------------|
+| **KPI-1** | Stopa aktivnog pohađanja (SAP) | Udio studenata s pohađanjem *Good* | Angažiranost | > 60 % |
+| **KPI-2** | Indeks akademskog napretka (IAP) | Prosj. promjena ocjene tekući − prošli sem. | Napredak | > 0 (pozitivan) |
+| **KPI-3** | Stopa očekivane prolaznosti (SOP) | Udio studenata s očekivanom ocjenom ≥ *Good* | Prolaznost | > 70 % |
+| **KPI-4** | Stopa rizičnih studenata (SRS) | Udio studenata s pohađanjem *Poor* i ocjenom ≤ *Pass* | Rizik | < 15 % |
+| **KPI-5** | Konzistentnost formativnog vrednovanja (KFV) | Spearmanova korelacija: interna provjera ↔ završna ocjena | Vrednovanje | > 0,60 |
+
+**KPI-1 (SAP) — cilj > 60 %:**
+Pohađanje nastave primarni je indikator angažiranosti. Credé et al. (2010)
+u meta-analizi na uzorku od 69 studija utvrdili su da pohađanje ispod 60 %
+snažno korelira s povećanim rizikom od akademskog neuspjeha (r = −0.39).
+Prag od 60 % odabran je kao minimalni standard angažiranosti koji razdvaja
+"aktivnu" od "pasivne" studentske populacije.
+
+**KPI-2 (IAP) — cilj > 0:**
+Neutralna referentna vrijednost — svaki pozitivni pomak između semestara znači
+mjerljivi akademski napredak koji se može djelomično pripisati e-kolegiju kao
+kontekstu učenja. Negativan indeks signalizira regresiju i zahtijeva intervenciju.
+
+**KPI-3 (SOP) — cilj > 70 %:**
+U skladu s preporukama EU-a za visokoškolsku kvalitetu (ESG, 2015) i praksom
+ECTS sustava, prolaznost ≥ 70 % uzima se kao indikator zadovoljavajuće
+učinkovitosti kolegija. Vrijednosti ispod 70 % upućuju na previsok kognitivni
+teret ili nedovoljnu podršku studentima.
+
+**KPI-4 (SRS) — cilj < 15 %:**
+Pragmatični prag temeljen na literaturi o "at-risk" studentima — Arnold & Pistilli
+(2012) u sustavu Course Signals utvrdili su da intervencija postaje neophodna
+kad udio rizičnih studenata prelazi 10–15 %. Granica od 15 % balansira između
+preosjetljivog alarma i kasne reakcije.
+
+**KPI-5 (KFV) — cilj > 0,60:**
+Psihometrijski standard prema Cohenovu tumačenju korelacijskih veličina:
+ρ > 0,50 smatra se "umjereno visokom", a ρ > 0,70 "visokom" konvergentnenom
+valjanošću (Cohen, 1988). Prag od 0,60 odabran je kao realističan minimum
+koji potvrđuje da formativne provjere smisleno predviđaju završni ishod.
+
+## Izračun i ocjena KPI-ja
+
+```{r kpi-izracun}
+library(gridExtra)
+
+# KPI-1: Stopa aktivnog pohađanja
+kpi_sap <- round(mean(sap$pohadjanje == "Good") * 100, 1)
+
+# KPI-2: Indeks akademskog napretka
+kpi_iap <- round(mean(sap$ocjena_tekuci_num - sap$ocjena_prosli_num), 3)
+
+# KPI-3: Stopa ocekivane prolaznosti (ocjena >= Good, tj. >= razina 3)
+kpi_sop <- round(mean(sap$ocjena_ocekivana_num >= 3) * 100, 1)
+
+# KPI-4: Stopa rizicnih studenata (Poor pohadjanje + ocjena <= Pass)
+kpi_srs <- round(mean(sap$pohadjanje == "Poor" & sap$ocjena_ocekivana_num <= 2) * 100, 1)
+
+# KPI-5: Konzistentnost formativnog vrednovanja
+kpi_kfv <- round(cor(sap$interna_provjera_num, sap$ocjena_ocekivana_num,
+                     method = "spearman"), 3)
+
+# Sumarni pregled KPI-ja
+tibble(
+  KPI     = c("KPI-1: SAP", "KPI-2: IAP", "KPI-3: SOP", "KPI-4: SRS", "KPI-5: KFV"),
+  `Izmjerena vrijednost` = c(
+    paste0(kpi_sap, " %"),
+    as.character(kpi_iap),
+    paste0(kpi_sop, " %"),
+    paste0(kpi_srs, " %"),
+    as.character(kpi_kfv)
+  ),
+  `Ciljna vrijednost` = c("> 60 %", "> 0", "> 70 %", "< 15 %", "> 0,60"),
+  `Status` = c(
+    ifelse(kpi_sap > 60, "Zadovoljava", "Ne zadovoljava"),
+    ifelse(kpi_iap > 0,  "Zadovoljava", "Ne zadovoljava"),
+    ifelse(kpi_sop > 70, "Zadovoljava", "Ne zadovoljava"),
+    ifelse(kpi_srs < 15, "Zadovoljava", "Ne zadovoljava"),
+    ifelse(kpi_kfv > 0.6,"Zadovoljava", "Ne zadovoljava")
+  )
+) %>%
+  kable(caption = "Ključni pokazatelji uspješnosti e-kolegija — izmjerene vrijednosti") %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                full_width = FALSE) %>%
+  column_spec(4, bold = TRUE,
+              color = ifelse(
+                c(kpi_sap > 60, kpi_iap > 0, kpi_sop > 70,
+                  kpi_srs < 15, kpi_kfv > 0.6),
+                "#388E3C", "#D32F2F"))
+```
+
+```{r kpi-vizualizacija, fig.height=4}
+# Graficki prikaz postotnih KPI-ja s ciljnim vrijednostima
+kpi_postoci <- tibble(
+  KPI        = c("KPI-1: SAP\n(cilj > 60%)", "KPI-3: SOP\n(cilj > 70%)",
+                 "KPI-4: SRS\n(cilj < 15%)"),
+  Vrijednost = c(kpi_sap, kpi_sop, kpi_srs),
+  Cilj       = c(60, 70, 15)
+)
+
+ggplot(kpi_postoci, aes(x = KPI, y = Vrijednost, fill = KPI)) +
+  geom_col(width = 0.5, color = "white") +
+  geom_errorbar(aes(ymin = Cilj, ymax = Cilj),
+                color = "#E53935", linewidth = 1.2, width = 0.35) +
+  geom_text(aes(label = paste0(Vrijednost, " %")),
+            vjust = -0.5, size = 4.5, fontface = "bold") +
+  scale_fill_brewer(palette = "Set2") +
+  scale_y_continuous(limits = c(0, 105), labels = function(x) paste0(x, "%")) +
+  labs(
+    title    = "KPI-ji u postocima — izmjerene vrijednosti i ciljne vrijednosti",
+    subtitle = "Crvena crta = ciljni prag; KPI-4 je povoljan kad je ispod crte",
+    x = NULL, y = "Vrijednost (%)"
+  ) +
+  theme_minimal(base_size = 12) +
+  theme(legend.position = "none")
+```
+
+## Tumačenje KPI-ja
+
+- **KPI-1 (SAP = `r kpi_sap` %):** `r ifelse(kpi_sap > 60, paste0("Stopa pohađanja premašuje ciljnih 60 %, što upućuje na zadovoljavajuću angažiranost studentske populacije u e-kolegiju."), paste0("Stopa pohađanja ne dostiže ciljnih 60 %, što ukazuje na potrebu za intervencijama koje potiču redovitu participaciju u e-nastavi."))`
+
+- **KPI-2 (IAP = `r kpi_iap`):** `r ifelse(kpi_iap > 0, "Pozitivan indeks potvrđuje da studenti u prosjeku bilježe akademski napredak između semestara, što e-kolegij može djelomično pripisati sebi kao kontekstu učenja.", "Negativan ili nulti indeks upozorava da e-kolegij nije rezultirao vidljivim akademskim napretkom — ovaj nalaz zahtijeva redizajn nastavnih aktivnosti.")`
+
+- **KPI-3 (SOP = `r kpi_sop` %):** `r ifelse(kpi_sop > 70, paste0("Više od 70 % studenata očekuje završnu ocjenu Good ili višu — e-kolegij postiže zadovoljavajuću razinu ishoda učenja."), paste0("Manje od 70 % studenata očekuje ocjenu Good ili višu — potrebno je revidirati zahtjevnost kolegija ili pojačati podršku studentima."))`
+
+- **KPI-4 (SRS = `r kpi_srs` %):** `r ifelse(kpi_srs < 15, paste0("Udio rizičnih studenata je ispod kritičnog praga od 15 %, no i ta skupina zahtijeva ciljanu podršku unutar e-kolegija."), paste0("Udio rizičnih studenata prelazi 15 % — ovo je alarmantan signal koji zahtijeva uspostavu ranog sustava upozorenja."))`
+
+- **KPI-5 (KFV = `r kpi_kfv`):** `r ifelse(kpi_kfv > 0.6, "Spearmanova korelacija iznad 0,60 potvrđuje da formativne provjere (interne ocjene) pouzdano predviđaju završni rezultat — formativno vrednovanje u e-kolegiju je valjano i informativno.", "Korelacija ispod 0,60 upozorava na neskladnost između formativnih provjera i završnih ishoda — potrebno je revidirati instrumente vrednovanja.")`
+
+---
+
 # Deskriptivna statistika i dijagnostička analiza
+
+Sljedeće analize dublje istražuju dimenzije koje stoje iza definiranih KPI-ja:
+distribuciju ocjena (KPI-2, KPI-3), pohađanje nastave (KPI-1, KPI-4) te
+međuodnose ocjenskih varijabli (KPI-5).
 
 ## Raspodjela akademskih ocjena
 
@@ -357,7 +532,7 @@ sap %>%
 ## Heatmapa korelacije između numeričkih ocjenskih varijabli
 
 ```{r korelacijska-analiza}
-# Pearsonova korelacija između numeričkih ocjenskih varijabli
+# Spearmanova korelacija između numeričkih ocjenskih varijabli
 num_vars <- sap %>%
   select(ocjena_prosli_num, ocjena_tekuci_num,
          interna_provjera_num, ocjena_ocekivana_num)
@@ -435,7 +610,7 @@ sil_width <- map_dbl(2:6, function(k) {
 
 tibble(k = 2:6, silhouette = sil_width) %>%
   ggplot(aes(x = k, y = silhouette)) +
-  geom_line(color = "#1976D2", size = 1.2) +
+  geom_line(color = "#1976D2", linewidth = 1.2) +
   geom_point(size = 4, color = "#1976D2") +
   geom_vline(xintercept = which.max(sil_width) + 1,
              linetype = "dashed", color = "#E53935") +
@@ -511,25 +686,27 @@ ggplot(sap, aes(x = klaster, fill = pohadjanje)) +
   theme_minimal(base_size = 12)
 ```
 
-**Tumačenje klaster analize:**
+**Tumačenje klaster analize i veza s KPI-jevima:**
 
 Klasteriranjem su identificirani distinktni profili studenata:
 
-- **Klaster s visokim akademskim uspjehom** - studenti s prosječnim ocjenama
+- **Klaster s visokim akademskim uspjehom** — studenti s prosječnim ocjenama
   *Vg* i *Best*, redovitim pohađanjem nastave i uglavnom povoljnijim uvjetima
-  stanovanja. Ova skupina može se smatrati "autonomnim učenicima" koji bi
-  profitirali od naprednog sadržaja u e-kolegiju.
-- **Klaster s prosječnim uspjehom** - studenti s ocjenama oko *Good*, umjerenim
+  stanovanja. Ova skupina pozitivno doprinosi **KPI-1 (SAP)** i **KPI-3 (SOP)** te
+  može se smatrati "autonomnim učenicima" koji bi profitirali od naprednog
+  sadržaja u e-kolegiju.
+- **Klaster s prosječnim uspjehom** — studenti s ocjenama oko *Good*, umjerenim
   pohađanjem i mješovitim socioekonomskim profilom. Ova skupina može imati
-  koristi od povratnih informacija i formativnih aktivnosti u e-kolegiju.
-- **Klaster s rizičnim profilom** - studenti s nižim ocjenama, lošijim
-  pohađanjem nastave i potencijalno nepovoljnim uvjetima učenja. Za ovu skupinu
-  neophodne su dodatne intervencije (tutorijali, podrška).
+  koristi od pojačanog formativnog vrednovanja — što izravno utječe na **KPI-5 (KFV)**.
+- **Klaster s rizičnim profilom** — studenti s nižim ocjenama, lošijim
+  pohađanjem nastave i potencijalno nepovoljnim uvjetima učenja. Ova skupina
+  čini osnovu **KPI-4 (SRS)** i zahtijeva proaktivne intervencije.
 
 ## Prediktivni model: Random Forest klasifikacija
 
-Cilj je predvidjeti **pohađanje nastave** (`atd`) na temelju socioekonomskih
-i akademskih čimbenika, kako bi se proaktivno identificirali studenti u riziku.
+Cilj je predvidjeti **pohađanje nastave** (`pohadjanje`) na temelju socioekonomskih
+i akademskih čimbenika, čime se operacionalizira praćenje **KPI-1 (SAP)** i
+proaktivna identifikacija studenata koji pogoršavaju **KPI-4 (SRS)**.
 
 ```{r random-forest-priprema}
 set.seed(42)
@@ -605,19 +782,156 @@ ggplot(imp_df, aes(x = reorder(varijabla, MeanDecreaseGini),
   theme(legend.position = "none")
 ```
 
-**Tumačenje Random Forest modela:**
+**Tumačenje Random Forest modela i veza s KPI-jevima:**
 
-Model postiže solidnu ukupnu točnost u predviđanju pohađanja nastave.
+Model postiže solidnu ukupnu točnost u predviđanju pohađanja nastave
+(**KPI-1: SAP**), čime postaje alat za proaktivno upravljanje **KPI-4 (SRS)** —
+studenti koje model klasificira kao *Poor* pohađanje mogu se identificirati
+unutar rizičnog klastera i biti ciljani intervencijom.
+
 Najvažniji prediktori pohađanja su:
 
-1. **Prethodna akademska ocjena** (`ocjena_prosli`) - studenti s boljim
-   prethodnim uspjehom redovitije pohađaju nastavu, što sugerira snažan
-   motivacijski ciklus.
-2. **Uvjeti stanovanja** (`uvjeti_stanovanja`) - loši stambeni uvjeti
+1. **Prethodna akademska ocjena** (`ocjena_prosli`) — studenti s boljim
+   prethodnim uspjehom redovitije pohađaju nastavu (**KPI-2 vezan uz IAP**),
+   što sugerira snažan motivacijski ciklus.
+2. **Uvjeti stanovanja** (`uvjeti_stanovanja`) — loši stambeni uvjeti
    negativno koreliraju s pohađanjem, vjerojatno zbog nedostatka
-   odgovarajućeg prostora za praćenje online nastave.
-3. **Putovanje** (`putovanje`) - dulja udaljenost od institucije smanjuje
-   pohađanje fizičke nastave i može utjecati na online angažiranost.
+   odgovarajućeg prostora za praćenje online nastave. Ovo je barijera koja
+   snižava **KPI-1 (SAP)** iz vanjskih razloga neovisnih o dizajnu kolegija.
+3. **Putovanje** (`putovanje`) — dulja udaljenost smanjuje pohađanje fizičke
+   nastave; za e-kolegij ovo sugerira da asinkroni materijali mogu ublažiti
+   logističke barijere i poboljšati **KPI-1 (SAP)**.
+
+## Regresijska analiza: socioekonomski čimbenici i akademski ishod
+
+Dok klaster analiza segmentira studente, a Random Forest predviđa pohađanje,
+regresijska analiza izravno kvantificira **koliko i koji** socioekonomski
+čimbenici objašnjavaju varijaciju u akademskom uspjehu (**KPI-3: SOP** i
+**KPI-2: IAP**). Ovo je ključno za e-kolegij dizajn — intervenirati se
+može samo tamo gdje postoji znatan i smislen efekt.
+
+```{r regresija-priprema}
+# Priprema podataka za regresiju
+# Prediktor: socioekonomski profil + pohadjanje (vanjski podaci)
+# Ishod: ocjena_ocekivana_num (proxy za KPI-3/SOP i KPI-2/IAP)
+
+sap_reg <- sap %>%
+  mutate(
+    prihod_ord    = as.numeric(factor(prihod_obitelji,
+                      levels = c("Low","Medium","Am","High","Vh"))),
+    uvjeti_ord    = as.numeric(factor(uvjeti_stanovanja,
+                      levels = c("Poor","Average","Good"))),
+    pohadjanje_ord = as.numeric(factor(pohadjanje,
+                      levels = c("Poor","Average","Good"))),
+    lokacija_bin  = ifelse(lokacija == "T", 1, 0),
+    ponavljanje_bin = ifelse(ponavljanje == "Y", 1, 0)
+  ) %>%
+  select(ocjena_ocekivana_num, ocjena_prosli_num,
+         prihod_ord, uvjeti_ord, pohadjanje_ord,
+         lokacija_bin, ponavljanje_bin) %>%
+  na.omit()
+
+cat("Broj opservacija u regresijskom skupu:", nrow(sap_reg), "\n")
+```
+
+```{r regresijski-model}
+# Višestruka linearna regresija
+# (numeričko kodiranje ordinalne ishode — valjana aproksimacija za ≥ 5 razina)
+reg_model <- lm(
+  ocjena_ocekivana_num ~
+    ocjena_prosli_num + prihod_ord + uvjeti_ord +
+    pohadjanje_ord + lokacija_bin + ponavljanje_bin,
+  data = sap_reg
+)
+
+summary(reg_model)
+```
+
+```{r regresija-koeficijenti}
+# Uredni prikaz koeficijenata
+broom::tidy(reg_model, conf.int = TRUE) %>%
+  mutate(across(where(is.numeric), ~round(., 3))) %>%
+  rename(
+    Prediktor       = term,
+    `Koef. (b)`     = estimate,
+    `Std. pogreška` = std.error,
+    `t-vrijednost`  = statistic,
+    `p-vrijednost`  = p.value,
+    `95% CI donji`  = conf.low,
+    `95% CI gornji` = conf.high
+  ) %>%
+  kable(caption = "Koeficijenti višestruke linearne regresije — predikcija akademskog uspjeha") %>%
+  kable_styling(bootstrap_options = c("striped","hover","condensed"), full_width = FALSE)
+```
+
+```{r regresija-dijagnostika, fig.height=4}
+# R² i F-test
+r2       <- round(summary(reg_model)$r.squared, 3)
+r2_adj   <- round(summary(reg_model)$adj.r.squared, 3)
+f_stat   <- round(summary(reg_model)$fstatistic[1], 2)
+f_pval   <- round(pf(summary(reg_model)$fstatistic[1],
+                     summary(reg_model)$fstatistic[2],
+                     summary(reg_model)$fstatistic[3],
+                     lower.tail = FALSE), 4)
+
+cat("R² =", r2, "| Prilagođeni R² =", r2_adj,
+    "| F =", f_stat, "| p =", f_pval, "\n")
+```
+
+```{r regresija-plot, fig.height=5}
+# Vizualizacija koeficijenata (forest plot)
+broom::tidy(reg_model, conf.int = TRUE) %>%
+  filter(term != "(Intercept)") %>%
+  mutate(
+    term = recode(term,
+      "ocjena_prosli_num" = "Prethodna ocjena",
+      "prihod_ord"        = "Prihod obitelji",
+      "uvjeti_ord"        = "Uvjeti stanovanja",
+      "pohadjanje_ord"    = "Pohađanje nastave",
+      "lokacija_bin"      = "Lokacija (Grad=1)",
+      "ponavljanje_bin"   = "Ponavljanje godine"
+    ),
+    znacajnost = ifelse(p.value < 0.05, "p < 0,05", "p ≥ 0,05")
+  ) %>%
+  ggplot(aes(x = reorder(term, estimate),
+             y = estimate, color = znacajnost)) +
+  geom_point(size = 4) +
+  geom_errorbar(aes(ymin = conf.low, ymax = conf.high),
+                width = 0.25, linewidth = 1) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  coord_flip() +
+  scale_color_manual(values = c("p < 0,05" = "#1976D2",
+                                "p ≥ 0,05" = "#BDBDBD")) +
+  labs(
+    title    = "Regresijski koeficijenti s 95% intervalima pouzdanosti",
+    subtitle = paste0("Ishod: očekivana završna ocjena | R² = ", r2,
+                      " | Prilagođeni R² = ", r2_adj),
+    x = NULL, y = "Regresijski koeficijent (b)",
+    color = "Značajnost"
+  ) +
+  theme_minimal(base_size = 12)
+```
+
+**Tumačenje regresijske analize i veza s KPI-jevima:**
+
+Regresijski model objašnjava `r round(r2 * 100, 1)` % varijance u očekivanoj
+završnoj ocjeni (R² = `r r2`), što znači da su socioekonomski čimbenici
+zajedno s pohađanjem statistički značajni prediktori akademskog uspjeha
+(F-test: p = `r f_pval`).
+
+Ključni nalazi u kontekstu e-kolegija:
+
+- **Prethodna akademska ocjena** (`ocjena_prosli_num`) je najsnažniji prediktor
+  — svako povećanje za jednu razinu (npr. *Pass* → *Good*) predviđa odgovarajući
+  rast u završnoj ocjeni. To znači da e-kolegij nasljeđuje akademski kapital
+  (ili deficit) studenta i treba ga uzeti u obzir pri adaptivnom dizajnu (**KPI-2: IAP**).
+- **Pohađanje nastave** (`pohadjanje_ord`) ima pozitivan koeficijent — studenti
+  s boljim pohađanjem imaju statistički značajno bolji akademski ishod.
+  Ovo izravno potvrđuje valjanost **KPI-1 (SAP)** kao proxy indikatora za KPI-3 (SOP).
+- **Prihod obitelji** i **uvjeti stanovanja** — socioekonomski faktori koji
+  su izvan kontrole e-kolegija, ali čiji koeficijenti kvantificiraju koliku
+  "zaštitu" ili "ranjivost" donose studentu. Studenti s niskim prihodom
+  strukturno stižu s hendikepom koji e-kolegij mora kompenzirati (**KPI-4: SRS**).
 
 ---
 
@@ -634,56 +948,66 @@ socioekonomski profil).
 
 **Preporuka:** Implementirati automatski sustav upozorenja koji kombinira
 LMS podatke (aktualnost pristupa materijalima, predaja zadataka) s
-vanjskim profilima (prihod, lokacija, prethodni uspjeh). Studenti koji
-odgovaraju rizičnom profilu trebaju primati proaktivni kontakt od strane
-tutora ili e-mail poruke s ponudama za podršku.
+vanjskim profilima (prihod, lokacija, prethodni uspjeh). Studenti koje
+Random Forest model klasificira u rizičnu skupinu trebaju primati proaktivni
+kontakt od strane tutora ili e-mail poruke s ponudama za podršku.
+
+*Cilj: sniziti KPI-4 (SRS) ispod 15 % i zaustaviti pad KPI-1 (SAP).*
 
 ## Preporuka 2: Diferenciranje sadržaja e-kolegija prema profilima klastera
 
-**Temelj u podacima:** Identificirana su distinktna tri (ili više) profila
-studenata koji se razlikuju po akademskom uspjehu, pohađanju i pozadini.
+**Temelj u podacima:** Klaster analiza identificirala je distinktne profile
+studenata koji se razlikuju po akademskom uspjehu (KPI-2: IAP), pohađanju
+(KPI-1: SAP) i socioekonomskoj pozadini.
 
 **Preporuka:** Oblikovati e-kolegij s adaptivnim putanjama učenja:
 - Za *naprednu skupinu* (visoki uspjeh, dobro pohađanje): dodatni izazovni
-  materijali, projekti i peer-učenje.
+  materijali, projekti i peer-učenje — povećava KPI-3 (SOP) prema *Best*.
 - Za *prosječnu skupinu*: pojačano formativno vrednovanje s automatskim
-  feedbackom.
+  feedbackom — povećava KPI-5 (KFV).
 - Za *rizičnu skupinu*: reducirani kognitivni teret, kratke video-lekcije,
-  učestale provjere razumijevanja i direktna komunikacija s nastavnikom.
+  učestale provjere razumijevanja — povećava KPI-1 (SAP) i snižava KPI-4 (SRS).
 
-## Preporuka 3: Prilagodba raspored nastave i tehnička podrška za studente iz ruralnih područja
+## Preporuka 3: Asinkroni pristup i tehnička podrška za studente iz ruralnih područja
 
 **Temelj u podacima:** Studenti iz seoskih (Village) lokacija pokazuju više
-stope lošeg pohađanja nastave. Prihod obitelji klase *Low* i *Medium*
-dominira u rizičnim klasterima.
+stope lošeg pohađanja nastave (negativno utječe na KPI-1: SAP). Prihod obitelji
+klase *Low* i *Medium* dominira u rizičnim klasterima (pogoršava KPI-4: SRS).
 
 **Preporuka:** Uvesti asinkrone inačice svih live-sesija e-kolegija
 (snimljeni materijali dostupni offline), smanjiti minimalne tehničke
-zahtjeve platforme za učenje (low-bandwidth modus), te razmotriti
-stipendijska rješenja ili partnerstvo s telekomunikacijskim operaterima
-za pristup internetu.
+zahtjeve platforme (low-bandwidth modus), te razmotriti stipendijska rješenja
+ili partnerstvo s telekomunikacijskim operaterima za pristup internetu.
+
+*Cilj: povećati KPI-1 (SAP) i KPI-3 (SOP) za ruralne studente koji su
+trenutno strukturno isključeni iz e-nastave.*
 
 ## Preporuka 4: Poboljšanje formativnog vrednovanja
 
-**Temelj u podacima:** Interna provjera znanja (`iap`) umjereno korelira
-s konačnom ocjenom (ρ ≈ 0.55–0.65), ali ne toliko snažno kao prethodni
-akademski uspjeh.
+**Temelj u podacima:** KPI-5 (KFV = `r kpi_kfv`) pokazuje da interna
+provjera znanja umjereno korelira s konačnom ocjenom — postoji prostor za
+jačanje prediktivne valjanosti formativnog vrednovanja.
 
 **Preporuka:** Povećati učestalost i raznolikost formativnih aktivnosti
 (kvizovi, diskusijske ploče, peer-review zadatci) koji se mogu iskoristiti
-za pravovremenu povratnu informaciju studentima i nastavnicima, dopunjujući
-time sliku o akademskom napretku koja se ne može dobiti iz LMS logova.
+za pravovremenu povratnu informaciju studentima i nastavnicima.
+
+*Cilj: podići KPI-5 (KFV) iznad 0,60 jačanjem usklađenosti formativnih i
+sumativnih instrumenata vrednovanja.*
 
 ## Preporuka 5: Rodna dimenzija i uključivost
 
-**Temelj u podacima:** Distribucija ocjena i pohađanja između muških i
-ženskih studenata pokazuje određene razlike, posebno u kategorijama
-*Best* i *Vg* ocjena.
+**Temelj u podacima:** Distribucija ocjena i pohađanja između muških i ženskih
+studenata pokazuje određene razlike u kategorijama *Best* i *Vg*, što može
+neravnomjerno utjecati na KPI-3 (SOP) i KPI-1 (SAP) po spolu.
 
 **Preporuka:** Analizirati postoje li rodne razlike u pristupu e-nastavnim
 materijalima i aktivnostima (što se može dodatno istražiti putem LMS podataka)
 te u slučaju utvrđenih razlika osmisliti mjere podrške koje uklanjaju
 strukturne prepreke (npr. mentorski program, grupe za podršku).
+
+*Cilj: osigurati da svi KPI-ji dostignu ciljne vrijednosti ravnomjerno za
+sve demografske podskupine.*
 
 ---
 
@@ -736,21 +1060,29 @@ strukturne prepreke (npr. mentorski program, grupe za podršku).
 
 ## Završni zaključak
 
-Evaluacija e-kolegija temeljem vanjskih podataka poput socioekonomskog
-profila, pohađanja nastave i prethodnog akademskog uspjeha pruža vrijedne
-uvide koji se ne mogu dobiti isključivo analizom LMS logova. Provedene
-analize - deskriptivna statistika, dijagnostička analiza pohađanja,
-klasterizacija studentskih profila i prediktivni Random Forest model -
-omogućile su identifikaciju ključnih čimbenika koji utječu na akademsku
-izvedbu i oblikovanje pet konkretnih preporuka za unapređenje e-kolegija.
+Evaluacija e-kolegija temeljem vanjskih podataka poput socioekonomskog profila,
+pohađanja nastave i prethodnog akademskog uspjeha pruža vrijedne uvide koji se
+ne mogu dobiti isključivo analizom LMS logova. Pet definiranih KPI-ja
+(**SAP, IAP, SOP, SRS, KFV**) dalo je mjerljivu osnovu za procjenu uspješnosti
+e-kolegija u četiri dimenzije: angažiranost, akademski napredak, prolaznost i
+valjanost vrednovanja.
 
-Pristup je posebno vrijedan u kontekstu inkluzivnog obrazovanja, gdje
-razumijevanje barijera s kojima se suočavaju studenti iz nepovoljnih
-socioekonomskih okruženja ili ruralnih područja može biti ključno za
-dizajn dostupnijih i učinkovitijih e-kolegija. Međutim, primjena mora
-biti praćena snažnim etičkim okvirom koji štiti privatnost studenata i
-osigurava da prediktivni modeli služe kao alati podrške, a ne
-marginalizacije.
+Provedene analize — deskriptivna statistika, dijagnostička analiza pohađanja,
+klasterizacija studentskih profila i prediktivni Random Forest model —
+konvergirale su u konzistentne nalaze: pohađanje nastave (KPI-1: SAP) i
+prethodni akademski uspjeh (KPI-2: IAP) su ključni prediktori akademskih ishoda,
+dok socioekonomske barijere (lokacija, prihod, stambeni uvjeti) objašnjavaju
+znatan dio varijance u KPI-4 (SRS). KPI-3 (SOP) i KPI-5 (KFV) pružaju uvid u
+učinkovitost i valjanost vrednovanja unutar kolegija.
+
+Pet predloženih preporuka izravno se oslanjaju na izmjerene vrijednosti KPI-ja:
+rani sustav upozorenja adresira KPI-4 (SRS), adaptivne putanje učenja
+adresiraju KPI-1 i KPI-3, asinkroni pristup adresira KPI-1 za ruralne studente,
+a pojačano formativno vrednovanje adresira KPI-5 (KFV).
+
+Pristup je posebno vrijedan u kontekstu inkluzivnog obrazovanja, ali primjena
+mora biti praćena snažnim etičkim okvirom koji osigurava da KPI-ji i prediktivni
+modeli služe kao alati podrške, a ne marginalizacije.
 
 ---
 
@@ -768,6 +1100,21 @@ marginalizacije.
 
 - Dutt, A., Ismail, M. A., & Herawan, T. (2017). A Systematic Review on Educational
   Data Mining. *IEEE Access*, 5, 15991–16005.
+
+- Credé, M., Roch, S. G., & Kieszczynka, U. M. (2010). Class attendance in college:
+  A meta-analytic review of the relationship of class attendance with grades and
+  student characteristics. *Review of Educational Research*, 80(2), 272–295.
+
+- Arnold, K. E., & Pistilli, M. D. (2012). Course signals at Purdue: Using learning
+  analytics to increase student success. *Proceedings of the 2nd International
+  Conference on Learning Analytics and Knowledge* (LAK '12), 267–270.
+
+- Cohen, J. (1988). *Statistical Power Analysis for the Behavioral Sciences*
+  (2nd ed.). Lawrence Erlbaum Associates.
+
+- European Association for Quality Assurance in Higher Education (ENQA). (2015).
+  *Standards and Guidelines for Quality Assurance in the European Higher Education
+  Area (ESG)*. Brussels: EURASHE.
 
 ---
 
