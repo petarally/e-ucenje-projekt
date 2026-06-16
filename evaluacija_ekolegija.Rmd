@@ -257,10 +257,14 @@ mjerljivi akademski napredak koji se može djelomično pripisati e-kolegiju kao
 kontekstu učenja. Negativan indeks signalizira regresiju i zahtijeva intervenciju.
 
 **KPI-3 (SOP) — cilj > 70 %:**
-U skladu s preporukama EU-a za visokoškolsku kvalitetu (ESG, 2015) i praksom
-ECTS sustava, prolaznost ≥ 70 % uzima se kao indikator zadovoljavajuće
-učinkovitosti kolegija. Vrijednosti ispod 70 % upućuju na previsok kognitivni
-teret ili nedovoljnu podršku studentima.
+Prag od 70 % prolaznosti pragmatičan je standard koji se široko koristi u
+visokoobrazovnoj analitici (vidi npr. Tinto, 1987; Bean & Metzner, 1985) i
+konzistentan je s praksom ECTS sustava u kojemu se ocjene A–C (ekvivalent
+*Good* i više) dodjeljuju otprilike gornjim 70 % uspješne populacije. ESG
+(ENQA, 2015) ne propisuje konkretne numeričke pragove prolaznosti, ali
+naglašava kontinuirano praćenje studentskog napretka kao kriterij kvalitete.
+Vrijednosti ispod 70 % upućuju na previsok kognitivni teret ili nedovoljnu
+podršku studentima.
 
 **KPI-4 (SRS) — cilj < 15 %:**
 Pragmatični prag temeljen na literaturi o "at-risk" studentima — Arnold & Pistilli
@@ -269,10 +273,11 @@ kad udio rizičnih studenata prelazi 10–15 %. Granica od 15 % balansira izmeđ
 preosjetljivog alarma i kasne reakcije.
 
 **KPI-5 (KFV) — cilj > 0,60:**
-Psihometrijski standard prema Cohenovu tumačenju korelacijskih veličina:
-ρ > 0,50 smatra se "umjereno visokom", a ρ > 0,70 "visokom" konvergentnenom
-valjanošću (Cohen, 1988). Prag od 0,60 odabran je kao realističan minimum
-koji potvrđuje da formativne provjere smisleno predviđaju završni ishod.
+Psihometrijski standard prema Campbell & Fiske (1959): konvergentna
+valjanost smatra se prihvatljivom kad korelacija između dvaju mjerenja istog
+konstrukta prelazi 0,50–0,60. Cohen (1988) klasificira ρ = 0,50 kao "velik"
+efekt u kontekstu statističke snage, što potvrđuje da je prag od 0,60 konzervativan
+minimum koji osigurava da formativne provjere smisleno predviđaju završni ishod.
 
 ## Izračun i ocjena KPI-ja
 
@@ -354,7 +359,7 @@ ggplot(kpi_postoci, aes(x = KPI, y = Vrijednost, fill = KPI)) +
 
 - **KPI-1 (SAP = `r kpi_sap` %):** `r ifelse(kpi_sap > 60, paste0("Stopa pohađanja premašuje ciljnih 60 %, što upućuje na zadovoljavajuću angažiranost studentske populacije u e-kolegiju."), paste0("Stopa pohađanja ne dostiže ciljnih 60 %, što ukazuje na potrebu za intervencijama koje potiču redovitu participaciju u e-nastavi."))`
 
-- **KPI-2 (IAP = `r kpi_iap`):** `r ifelse(kpi_iap > 0, "Pozitivan indeks potvrđuje da studenti u prosjeku bilježe akademski napredak između semestara, što e-kolegij može djelomično pripisati sebi kao kontekstu učenja.", "Negativan ili nulti indeks upozorava da e-kolegij nije rezultirao vidljivim akademskim napretkom — ovaj nalaz zahtijeva redizajn nastavnih aktivnosti.")`
+- **KPI-2 (IAP = `r kpi_iap`):** `r ifelse(kpi_iap > 0, "Pozitivan indeks pokazuje da studenti u prosjeku bilježe akademski napredak između semestara. Napomena: budući da se radi o opservacijskim podacima, napredak nije moguće kauzalno pripisati e-kolegiju — na njega mogu utjecati sazrijevanje, druge kolegije ili vanjski faktori.", "Negativan ili nulti indeks upozorava da studenti u prosjeku ne bilježe akademski napredak između semestara — ovaj nalaz zahtijeva daljnje istraživanje uzroka i eventualni redizajn nastavnih aktivnosti.")`
 
 - **KPI-3 (SOP = `r kpi_sop` %):** `r ifelse(kpi_sop > 70, paste0("Više od 70 % studenata očekuje završnu ocjenu Good ili višu — e-kolegij postiže zadovoljavajuću razinu ishoda učenja."), paste0("Manje od 70 % studenata očekuje ocjenu Good ili višu — potrebno je revidirati zahtjevnost kolegija ili pojačati podršku studentima."))`
 
@@ -785,9 +790,18 @@ ggplot(imp_df, aes(x = reorder(varijabla, MeanDecreaseGini),
 **Tumačenje Random Forest modela i veza s KPI-jevima:**
 
 Model postiže solidnu ukupnu točnost u predviđanju pohađanja nastave
-(**KPI-1: SAP**), čime postaje alat za proaktivno upravljanje **KPI-4 (SRS)** —
+(**KPI-1: SAP**), čime postaje alat za upravljanje **KPI-4 (SRS)** —
 studenti koje model klasificira kao *Poor* pohađanje mogu se identificirati
-unutar rizičnog klastera i biti ciljani intervencijom.
+i biti ciljani intervencijom.
+
+**Važna napomena o vremenskom redoslijedu:** Model uključuje varijable
+`ocjena_tekuci` i `interna_provjera` koje opisuju isti ili kasniji vremenski
+trenutak od pohađanja. Za istinsku *proaktivnu* primjenu (identifikacija rizika
+*prije* semestra), model treba biti ograničen na prediktore dostupne na početku
+semestra: `ocjena_prosli`, `spol`, `kasta`, `lokacija`, `smjestaj`,
+`prihod_obitelji`, `uvjeti_stanovanja`, `vrsta_skole` i `ponavljanje`.
+Trenutna verzija modela prikladna je za retrospektivnu analizu i razumijevanje
+čimbenika pohađanja, ali ne za čisto proaktivnu primjenu.
 
 Najvažniji prediktori pohađanja su:
 
@@ -914,10 +928,14 @@ broom::tidy(reg_model, conf.int = TRUE) %>%
 
 **Tumačenje regresijske analize i veza s KPI-jevima:**
 
-Regresijski model objašnjava `r round(r2 * 100, 1)` % varijance u očekivanoj
-završnoj ocjeni (R² = `r r2`), što znači da su socioekonomski čimbenici
-zajedno s pohađanjem statistički značajni prediktori akademskog uspjeha
-(F-test: p = `r f_pval`).
+Regresijski model objašnjava `r round(r2 * 100, 1)` % varijance u
+**samoprijavljenoj očekivanoj završnoj ocjeni** (R² = `r r2`). Varijabla
+`ocjena_ocekivana` (`esp`) u originalnom skupu podataka predstavlja studentovu
+*procjenu* vlastite završne ocjene, a ne izmjereni stvarni ishod — što unosi
+mogućnost optimizmne pristranosti. Unatoč tome, socioekonomski čimbenici
+zajedno s pohađanjem statistički su značajni prediktori te samoprocjene
+(F-test: p = `r f_pval`), što je i dalje informativno za razumijevanje
+studentske percepcije vlastitog napretka.
 
 Ključni nalazi u kontekstu e-kolegija:
 
@@ -1108,6 +1126,9 @@ modeli služe kao alati podrške, a ne marginalizacije.
 - Arnold, K. E., & Pistilli, M. D. (2012). Course signals at Purdue: Using learning
   analytics to increase student success. *Proceedings of the 2nd International
   Conference on Learning Analytics and Knowledge* (LAK '12), 267–270.
+
+- Campbell, D. T., & Fiske, D. W. (1959). Convergent and discriminant validation
+  by the multitrait-multimethod matrix. *Psychological Bulletin*, 56(2), 81–105.
 
 - Cohen, J. (1988). *Statistical Power Analysis for the Behavioral Sciences*
   (2nd ed.). Lawrence Erlbaum Associates.
