@@ -810,15 +810,16 @@ ggplot(imp_df, aes(x = reorder(varijabla, MeanDecreaseGini),
 
 **Tumačenje Random Forest modela i veza s KPI-jevima:**
 
-**Model ne postiže zadovoljavajuću prediktivnu moć.** Na testnom skupu točnost
-(≈ 44 %) praktički je jednaka stopi većinske klase (No-Information Rate ≈ 43 %),
-a Kappa koeficijent (≈ 0,10) ukazuje na slaganje tek neznatno iznad slučajnog.
-Provjera kroz 20 različitih podjela podataka potvrđuje nestabilnost (točnost u
-rasponu 32–56 %, prosječna Kappa ≈ 0,10). Drugim riječima, na ovom uzorku
-(n = 131, 3 klase, slabi signali) model **ne predviđa pohađanje pouzdanije od
-nasumičnog pogađanja većinske klase** i ne može se preporučiti kao operativni
-alat za identifikaciju rizičnih studenata. Glavni razlog je mala veličina uzorka
-i slaba povezanost dostupnih vanjskih prediktora s pohađanjem.
+**Model ne postiže zadovoljavajuću prediktivnu moć.** Na testnom skupu (uz
+`set.seed(42)`) točnost iznosi svega ≈ 40 %, što je čak *ispod* stope većinske
+klase (No-Information Rate ≈ 44 %), a Kappa koeficijent (≈ 0,04) praktički je
+jednak nuli — slaganje na razini slučaja. Provjera kroz 20 različitih podjela
+podataka potvrđuje nestabilnost (točnost u rasponu 32–56 %, prosječna ≈ 44 %,
+prosječna Kappa ≈ 0,10). Drugim riječima, na ovom uzorku (n = 131, 3 klase,
+slabi signali) model **ne predviđa pohađanje pouzdanije od nasumičnog pogađanja
+većinske klase** i ne može se preporučiti kao operativni alat za identifikaciju
+rizičnih studenata. Glavni razlog je mala veličina uzorka i slaba povezanost
+dostupnih vanjskih prediktora s pohađanjem.
 
 **Napomena o vremenskom redoslijedu:** Model uključuje i varijable
 `ocjena_tekuci` te `interna_provjera` koje opisuju isti ili kasniji vremenski
@@ -830,9 +831,12 @@ modela treba tumačiti isključivo opisno, a ne kao dokaz uzročnosti — najvi�
 rangira **prethodnu akademsku ocjenu** (`ocjena_prosli`), a potom
 **prihod obitelji** (`prihod_obitelji`), **kastinsku kategoriju** (`kasta`) i
 **uvjete stanovanja** (`uvjeti_stanovanja`). Varijable poput putovanja (`tt`),
-ponavljanja i vrste škole nalaze se pri dnu ljestvice važnosti. Budući da model
-ne generalizira, ove rangove ne treba pretvarati u konkretne uzročne tvrdnje
-niti u temelj za intervencije bez dodatnog, većeg uzorka.
+vrste škole i veličine obitelji nalaze se pri dnu ljestvice važnosti. Zanimljivo
+je da ponavljanje godine, iako značajno u regresiji za *ishod*, ovdje ima nisku
+Gini-važnost za *pohađanje* — što ilustrira da prediktori ishoda i prediktori
+pohađanja nisu nužno isti. Budući da model ne generalizira, ove rangove ne treba
+pretvarati u konkretne uzročne tvrdnje niti u temelj za intervencije bez
+dodatnog, većeg uzorka.
 
 ## Regresijska analiza: socioekonomski čimbenici i akademski ishod
 
@@ -950,10 +954,11 @@ Regresijski model objašnjava `r round(r2 * 100, 1)` % varijance u
 **samoprijavljenoj očekivanoj završnoj ocjeni** (R² = `r r2`). Varijabla
 `ocjena_ocekivana` (`esp`) u originalnom skupu podataka predstavlja studentovu
 *procjenu* vlastite završne ocjene, a ne izmjereni stvarni ishod — što unosi
-mogućnost optimizmne pristranosti. Unatoč tome, socioekonomski čimbenici
-zajedno s pohađanjem statistički su značajni prediktori te samoprocjene
-(F-test: p = `r f_pval`), što je i dalje informativno za razumijevanje
-studentske percepcije vlastitog napretka.
+mogućnost optimističke pristranosti. Unatoč tome, model u cjelini statistički
+je značajan (F-test: p = `r f_pval`) i objašnjava bitan dio varijance, što je
+i dalje informativno za razumijevanje studentske percepcije vlastitog napretka —
+pri čemu, kako pokazuje nastavak, taj efekt nose ponajprije akademske, a ne
+socioekonomske varijable.
 
 Statistički značajni prediktori (p < 0,05) su sljedeća tri:
 
@@ -1106,9 +1111,11 @@ sve demografske podskupine.*
    o kastinskim kategorijama, prihodima ili jeziku nastave nisu direktno
    prenosivi na europski ili hrvatski visokoškolski kontekst.
 
-3. **Veličina uzorka** - Sa 131 studentskim zapisom, statistička snaga
-   modela je ograničena. Neke kategorije su slabo zastupljene (npr.
-   ocjena *Fail*), što otežava uravnoteženu klasifikaciju.
+3. **Veličina uzorka i neuravnoteženost** - Sa 131 studentskim zapisom,
+   statistička snaga modela je ograničena. Neke su kategorije izrazito slabo
+   zastupljene (npr. najviši prihod *Vh* sa 6 zapisa ili ocjena *Best* s 8),
+   dok kategorija *Fail* uopće ne postoji — što otežava uravnoteženu
+   klasifikaciju i upravo se odražava u slaboj izvedbi Random Forest modela.
 
 4. **Kauzalnost vs. korelacija** - Identificirane statističke veze
    (npr. prihod ↔ ocjena) ne impliciraju uzročnost. Bez eksperimentalnog
@@ -1136,7 +1143,7 @@ očekivanog ishoda izdvojila **prethodnu ocjenu**, **pohađanje nastave** i
 stambeni uvjeti, lokacija) u ovom uzorku **nisu** bile značajne — nalaz koji
 poziva na oprez pri socioekonomskom profiliranju. Random Forest model za
 predikciju pohađanja nije postigao pouzdanost iznad razine većinske klase
-(Kappa ≈ 0,10), što je očekivano s obzirom na malen uzorak (n = 131) i slabe
+(Kappa blizu nule), što je očekivano s obzirom na malen uzorak (n = 131) i slabe
 signale, te ga treba shvatiti kao ilustraciju metode, a ne kao operativni alat.
 Što se tiče samih KPI-ja: KPI-2 (IAP), KPI-3 (SOP) i KPI-4 (SRS) zadovoljavaju
 ciljne pragove, dok **KPI-1 (SAP, 42,7 %) i KPI-5 (KFV, 0,52) ne dostižu**
