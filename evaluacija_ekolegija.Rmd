@@ -23,6 +23,11 @@ knitr::opts_chunk$set(
   fig.height = 5,
   fig.align  = "center"
 )
+
+# Pomoćna funkcija: brojeve prikazuje s decimalnim zarezom (hrvatska konvencija).
+# Koristi se za vrijednosti koje se prikazuju u tekstu, tablicama i grafovima;
+# sirovi ispis R konzole (print, cat dijagnostike) ostaje u izvornom formatu.
+hr <- function(x) format(x, decimal.mark = ",", trim = TRUE)
 ```
 
 ---
@@ -247,7 +252,7 @@ dimenzije: **angažiranost**, **akademski napredak**, **prolaznost** i
 **KPI-1 (SAP) — cilj > 60 %:**
 Pohađanje nastave primarni je indikator angažiranosti. Credé et al. (2010)
 u meta-analizi na uzorku od 69 studija utvrdili su da pohađanje ispod 60 %
-snažno korelira s povećanim rizikom od akademskog neuspjeha (r = −0.39).
+snažno korelira s povećanim rizikom od akademskog neuspjeha (r = −0,39).
 Prag od 60 % odabran je kao minimalni standard angažiranosti koji razdvaja
 "aktivnu" od "pasivne" studentske populacije.
 
@@ -304,11 +309,11 @@ kpi_kfv <- round(cor(sap$interna_provjera_num, sap$ocjena_ocekivana_num,
 tibble(
   KPI     = c("KPI-1: SAP", "KPI-2: IAP", "KPI-3: SOP", "KPI-4: SRS", "KPI-5: KFV"),
   `Izmjerena vrijednost` = c(
-    paste0(kpi_sap, " %"),
-    as.character(kpi_iap),
-    paste0(kpi_sop, " %"),
-    paste0(kpi_srs, " %"),
-    as.character(kpi_kfv)
+    paste0(hr(kpi_sap), " %"),
+    hr(kpi_iap),
+    paste0(hr(kpi_sop), " %"),
+    paste0(hr(kpi_srs), " %"),
+    hr(kpi_kfv)
   ),
   `Ciljna vrijednost` = c("> 60 %", "> 0", "> 70 %", "< 15 %", "> 0,60"),
   `Status` = c(
@@ -342,7 +347,7 @@ ggplot(kpi_postoci, aes(x = KPI, y = Vrijednost, fill = KPI)) +
   geom_col(width = 0.5, color = "white") +
   geom_errorbar(aes(ymin = Cilj, ymax = Cilj),
                 color = "#E53935", linewidth = 1.2, width = 0.35) +
-  geom_text(aes(label = paste0(Vrijednost, " %")),
+  geom_text(aes(label = paste0(hr(Vrijednost), " %")),
             vjust = -0.5, size = 4.5, fontface = "bold") +
   scale_fill_brewer(palette = "Set2") +
   scale_y_continuous(limits = c(0, 105), labels = function(x) paste0(x, "%")) +
@@ -357,15 +362,15 @@ ggplot(kpi_postoci, aes(x = KPI, y = Vrijednost, fill = KPI)) +
 
 ## Tumačenje KPI-ja
 
-- **KPI-1 (SAP = `r kpi_sap` %):** `r ifelse(kpi_sap > 60, paste0("Stopa pohađanja premašuje ciljnih 60 %, što upućuje na zadovoljavajuću angažiranost studentske populacije u e-kolegiju."), paste0("Stopa pohađanja ne dostiže ciljnih 60 %, što ukazuje na potrebu za intervencijama koje potiču redovitu participaciju u e-nastavi."))`
+- **KPI-1 (SAP = `r hr(kpi_sap)` %):** `r ifelse(kpi_sap > 60, paste0("Stopa pohađanja premašuje ciljnih 60 %, što upućuje na zadovoljavajuću angažiranost studentske populacije u e-kolegiju."), paste0("Stopa pohađanja ne dostiže ciljnih 60 %, što ukazuje na potrebu za intervencijama koje potiču redovitu participaciju u e-nastavi."))`
 
-- **KPI-2 (IAP = `r kpi_iap`):** `r ifelse(kpi_iap > 0, "Pozitivan indeks pokazuje da studenti u prosjeku bilježe akademski napredak između semestara. Napomena: budući da se radi o opservacijskim podacima, napredak nije moguće kauzalno pripisati e-kolegiju — na njega mogu utjecati sazrijevanje, druge kolegije ili vanjski faktori.", "Negativan ili nulti indeks upozorava da studenti u prosjeku ne bilježe akademski napredak između semestara — ovaj nalaz zahtijeva daljnje istraživanje uzroka i eventualni redizajn nastavnih aktivnosti.")`
+- **KPI-2 (IAP = `r hr(kpi_iap)`):** `r ifelse(kpi_iap > 0, "Pozitivan indeks pokazuje da studenti u prosjeku bilježe akademski napredak između semestara. Napomena: budući da se radi o opservacijskim podacima, napredak nije moguće kauzalno pripisati e-kolegiju — na njega mogu utjecati sazrijevanje, druge kolegije ili vanjski faktori.", "Negativan ili nulti indeks upozorava da studenti u prosjeku ne bilježe akademski napredak između semestara — ovaj nalaz zahtijeva daljnje istraživanje uzroka i eventualni redizajn nastavnih aktivnosti.")`
 
-- **KPI-3 (SOP = `r kpi_sop` %):** `r ifelse(kpi_sop > 70, paste0("Više od 70 % studenata očekuje završnu ocjenu Good ili višu — e-kolegij postiže zadovoljavajuću razinu ishoda učenja."), paste0("Manje od 70 % studenata očekuje ocjenu Good ili višu — potrebno je revidirati zahtjevnost kolegija ili pojačati podršku studentima."))`
+- **KPI-3 (SOP = `r hr(kpi_sop)` %):** `r ifelse(kpi_sop > 70, paste0("Više od 70 % studenata očekuje završnu ocjenu Good ili višu — e-kolegij postiže zadovoljavajuću razinu ishoda učenja."), paste0("Manje od 70 % studenata očekuje ocjenu Good ili višu — potrebno je revidirati zahtjevnost kolegija ili pojačati podršku studentima."))`
 
-- **KPI-4 (SRS = `r kpi_srs` %):** `r ifelse(kpi_srs < 15, paste0("Udio rizičnih studenata je ispod kritičnog praga od 15 %, no i ta skupina zahtijeva ciljanu podršku unutar e-kolegija."), paste0("Udio rizičnih studenata prelazi 15 % — ovo je alarmantan signal koji zahtijeva uspostavu ranog sustava upozorenja."))`
+- **KPI-4 (SRS = `r hr(kpi_srs)` %):** `r ifelse(kpi_srs < 15, paste0("Udio rizičnih studenata je ispod kritičnog praga od 15 %, no i ta skupina zahtijeva ciljanu podršku unutar e-kolegija."), paste0("Udio rizičnih studenata prelazi 15 % — ovo je alarmantan signal koji zahtijeva uspostavu ranog sustava upozorenja."))`
 
-- **KPI-5 (KFV = `r kpi_kfv`):** `r ifelse(kpi_kfv > 0.6, "Spearmanova korelacija iznad 0,60 potvrđuje da formativne provjere (interne ocjene) pouzdano predviđaju završni rezultat — formativno vrednovanje u e-kolegiju je valjano i informativno.", "Korelacija ispod 0,60 upozorava na neskladnost između formativnih provjera i završnih ishoda — potrebno je revidirati instrumente vrednovanja.")`
+- **KPI-5 (KFV = `r hr(kpi_kfv)`):** `r ifelse(kpi_kfv > 0.6, "Spearmanova korelacija iznad 0,60 potvrđuje da formativne provjere (interne ocjene) pouzdano predviđaju završni rezultat — formativno vrednovanje u e-kolegiju je valjano i informativno.", "Korelacija ispod 0,60 upozorava na neskladnost između formativnih provjera i završnih ishoda — potrebno je revidirati instrumente vrednovanja.")`
 
 ---
 
@@ -416,7 +421,7 @@ prikazi_tablicu <- function(var, naziv) {
   data.frame(
     Ocjena    = names(tbl),
     Frekvencija = as.integer(tbl),
-    Postotak  = paste0(pct, " %")
+    Postotak  = paste0(hr(pct), " %")
   ) %>%
     kable(caption = naziv) %>%
     kable_styling(bootstrap_options = c("striped","condensed"), full_width = FALSE)
@@ -474,7 +479,8 @@ sap %>%
   group_by(spol) %>%
   mutate(pct = round(n / sum(n) * 100, 1)) %>%
   pivot_wider(names_from = pohadjanje, values_from = c(n, pct), values_fill = 0) %>%
-  kable(caption = "Pohađanje nastave prema spolu (broj i postotak)") %>%
+  kable(caption = "Pohađanje nastave prema spolu (broj i postotak)",
+        format.args = list(decimal.mark = ",")) %>%
   kable_styling(bootstrap_options = c("striped","condensed"), full_width = FALSE)
 ```
 
@@ -522,7 +528,8 @@ sap %>%
   arrange(lokacija, pohadjanje) %>%
   mutate(lokacija = recode(lokacija, "T" = "Grad (Town)", "V" = "Selo (Village)")) %>%
   kable(caption = "Pohađanje nastave prema lokaciji stanovanja",
-        col.names = c("Lokacija", "Pohađanje", "N", "Postotak (%)")) %>%
+        col.names = c("Lokacija", "Pohađanje", "N", "Postotak (%)"),
+        format.args = list(decimal.mark = ",")) %>%
   kable_styling(bootstrap_options = c("striped","condensed"), full_width = FALSE)
 ```
 
@@ -666,7 +673,8 @@ klaster_profil <- sap %>%
   )
 
 klaster_profil %>%
-  kable(caption = "Profili klastera prema prosječnim akademskim pokazateljima") %>%
+  kable(caption = "Profili klastera prema prosječnim akademskim pokazateljima",
+        format.args = list(decimal.mark = ",")) %>%
   kable_styling(bootstrap_options = c("striped","hover"), full_width = FALSE)
 ```
 
@@ -896,7 +904,8 @@ broom::tidy(reg_model, conf.int = TRUE) %>%
     `95% CI donji`  = conf.low,
     `95% CI gornji` = conf.high
   ) %>%
-  kable(caption = "Koeficijenti višestruke linearne regresije — predikcija akademskog uspjeha") %>%
+  kable(caption = "Koeficijenti višestruke linearne regresije — predikcija akademskog uspjeha",
+        format.args = list(decimal.mark = ",")) %>%
   kable_styling(bootstrap_options = c("striped","hover","condensed"), full_width = FALSE)
 ```
 
@@ -940,8 +949,8 @@ broom::tidy(reg_model, conf.int = TRUE) %>%
                                 "p ≥ 0,05" = "#BDBDBD")) +
   labs(
     title    = "Regresijski koeficijenti s 95% intervalima pouzdanosti",
-    subtitle = paste0("Ishod: očekivana završna ocjena | R² = ", r2,
-                      " | Prilagođeni R² = ", r2_adj),
+    subtitle = paste0("Ishod: očekivana završna ocjena | R² = ", hr(r2),
+                      " | Prilagođeni R² = ", hr(r2_adj)),
     x = NULL, y = "Regresijski koeficijent (b)",
     color = "Značajnost"
   ) +
@@ -950,12 +959,12 @@ broom::tidy(reg_model, conf.int = TRUE) %>%
 
 **Tumačenje regresijske analize i veza s KPI-jevima:**
 
-Regresijski model objašnjava `r round(r2 * 100, 1)` % varijance u
-**samoprijavljenoj očekivanoj završnoj ocjeni** (R² = `r r2`). Varijabla
+Regresijski model objašnjava `r hr(round(r2 * 100, 1))` % varijance u
+**samoprijavljenoj očekivanoj završnoj ocjeni** (R² = `r hr(r2)`). Varijabla
 `ocjena_ocekivana` (`esp`) u originalnom skupu podataka predstavlja studentovu
 *procjenu* vlastite završne ocjene, a ne izmjereni stvarni ishod — što unosi
 mogućnost optimističke pristranosti. Unatoč tome, model u cjelini statistički
-je značajan (F-test: p = `r f_pval`) i objašnjava bitan dio varijance, što je
+je značajan (F-test: p = `r hr(f_pval)`) i objašnjava bitan dio varijance, što je
 i dalje informativno za razumijevanje studentske percepcije vlastitog napretka —
 pri čemu, kako pokazuje nastavak, taj efekt nose ponajprije akademske, a ne
 socioekonomske varijable.
@@ -1047,7 +1056,7 @@ pristupa nastavnim sadržajima.*
 
 ## Preporuka 4: Poboljšanje formativnog vrednovanja
 
-**Temelj u podacima:** KPI-5 (KFV = `r kpi_kfv`) pokazuje da interna
+**Temelj u podacima:** KPI-5 (KFV = `r hr(kpi_kfv)`) pokazuje da interna
 provjera znanja umjereno korelira s konačnom ocjenom — postoji prostor za
 jačanje prediktivne valjanosti formativnog vrednovanja.
 
